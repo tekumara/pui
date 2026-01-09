@@ -1,0 +1,13 @@
+[package]
+name = "pui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ratatui = "0.29.0"
+crossterm = { version = "0.28.0", features = ["event-stream"] }
+tokio = { version = "1.42.0", features = ["full"] }
+anyhow = "1.0.94"
+pueue-lib = "0.30.1"
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.134"

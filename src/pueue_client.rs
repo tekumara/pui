@@ -1,0 +1,83 @@
+use anyhow::{anyhow, Result};
+use pueue_lib::message::*;
+use pueue_lib::settings::Settings;
+use pueue_lib::state::State;
+use pueue_lib::Client;
+use pueue_lib::network::socket::ConnectionSettings;
+use pueue_lib::secret::read_shared_secret;
+use pueue_lib::tls::load_certificate;
+
+pub struct PueueClient {
+    client: Client,
+}
+
+impl PueueClient {
+    pub async fn new() -> Result<Self> {
+        let (settings, _) = Settings::read(&None)?;
+        let secret = read_shared_secret(&settings.shared.shared_secret_path())
+            .map_err(|e| anyhow!("Failed to read shared secret: {:?}", e))?;
+
+        let connection_settings = if settings.shared.use_unix_socket {
+            ConnectionSettings::UnixSocket {
+                path: settings.shared.unix_socket_path(),
+            }
+        } else {
+            let cert = load_certificate(&settings.shared.daemon_cert())
+                .map_err(|e| anyhow!("Failed to load daemon certificate: {:?}", e))?;
+            ConnectionSettings::TlsTcpSocket {
+                host: settings.shared.host.clone(),
+                port: settings.shared.port.clone(),
+                certificate: cert,
+            }
+        };
+
+        let client = Client::new(connection_settings, &secret, false)
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+
+        Ok(Self { client })
+    }
+
+    pub async fn get_state(&mut self) -> Result<State> {
+        self.client.send_request(Request::Status).await.map_err(|e| anyhow!("{:?}", e))?;
+        let response = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+
+        if let Response::Status(state) = response {
+            Ok(*state)
+        } else {
+            Err(anyhow!("Unexpected response from pueue daemon: {:?}", response))
+        }
+    }
+
+    pub async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+        self.client.send_request(Request::Start(StartRequest {
+            tasks: TaskSelection::TaskIds(ids),
+        })).await.map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        Ok(())
+    }
+
+    pub async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+        self.client.send_request(Request::Pause(PauseRequest {
+            tasks: TaskSelection::TaskIds(ids),
+            wait: false,
+        })).await.map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        Ok(())
+    }
+
+    pub async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+        self.client.send_request(Request::Kill(KillRequest {
+            tasks: TaskSelection::TaskIds(ids),
+            signal: None,
+        })).await.map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        Ok(())
+    }
+
+    pub async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+        self.client.send_request(Request::Remove(ids)).await.map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        Ok(())
+    }
+}
