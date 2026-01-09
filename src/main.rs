@@ -10,11 +10,12 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Cell, Row, Table, TableState, Paragraph},
     Terminal,
 };
 use std::io;
 use std::time::{Duration, Instant};
+use std::path::Path;
 
 use crate::pueue_client::PueueClient;
 use pueue_lib::state::State;
@@ -61,8 +62,8 @@ async fn run_app<B: ratatui::backend::Backend>(
     let mut last_tick = Instant::now();
     let tick_rate = Duration::from_millis(250);
     let mut state: Option<State> = None;
-    let mut list_state = ListState::default();
-    list_state.select(Some(0));
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
 
     loop {
         if state.is_none() || last_tick.elapsed() >= tick_rate {
@@ -100,7 +101,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                 .split(chunks[1]);
 
             if let Some(s) = &state {
-                let tasks: Vec<ListItem> = s.tasks.iter().map(|(id, task)| {
+                let rows: Vec<Row> = s.tasks.iter().map(|(id, task)| {
                     let status = format!("{:?}", task.status);
                     let style = match status.as_str() {
                         "Running" => Style::default().fg(Color::Green),
@@ -109,29 +110,102 @@ async fn run_app<B: ratatui::backend::Backend>(
                         "Done" => Style::default().fg(Color::DarkGray),
                         _ => Style::default(),
                     };
-                    let content = format!("[{}] {} - {}", id, task.command, status);
-                    ListItem::new(content).style(style)
+
+                    let command_basename = Path::new(&task.command)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&task.command);
+
+                    let shortened_path = tico::tico(&task.path.to_string_lossy());
+
+                    let (start, end) = task.start_and_end();
+                    let duration_str = if let Some(start) = start {
+                        let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
+                        let end_ts = if let Some(end) = end {
+                            jiff::Timestamp::from_second(end.timestamp()).unwrap()
+                        } else {
+                            jiff::Timestamp::now()
+                        };
+                        let duration = end_ts.duration_since(start_ts);
+
+                        if duration.as_secs() < 60 {
+                            format!("{}s", duration.as_secs())
+                        } else if duration.as_secs() < 3600 {
+                            format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
+                        } else {
+                            format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+                        }
+                    } else {
+                        "-".to_string()
+                    };
+
+                    Row::new(vec![
+                        Cell::from(id.to_string()),
+                        Cell::from(status),
+                        Cell::from(command_basename.to_string()),
+                        Cell::from(shortened_path),
+                        Cell::from(duration_str),
+                    ]).style(style)
                 }).collect();
 
-                let task_list = List::new(tasks)
-                    .block(Block::default().borders(Borders::ALL).title(" Tasks "))
-                    .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Rgb(50, 50, 50)))
-                    .highlight_symbol(">> ");
-                f.render_stateful_widget(task_list, main_chunks[0], &mut list_state);
+                let header = Row::new(vec!["Id", "Status", "Command", "Path", "Duration"])
+                    .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan));
+
+                let task_table = Table::new(rows, [
+                    Constraint::Length(4),
+                    Constraint::Length(10),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(30),
+                    Constraint::Length(10),
+                ])
+                .header(header)
+                .block(Block::default().borders(Borders::ALL).title(" Tasks "))
+                .row_highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Rgb(50, 50, 50)))
+                .highlight_symbol(">> ");
+
+                f.render_stateful_widget(task_table, main_chunks[0], &mut table_state);
 
                 // Task Details
-                let selected_id = list_state.selected()
+                let selected_id = table_state.selected()
                     .and_then(|i| task_ids.get(i));
 
                 let details_text = if let Some(id) = selected_id {
                     if let Some(task) = s.tasks.get(id) {
+                        let (start, end) = task.start_and_end();
+                        let duration_str = if let Some(start) = start {
+                            let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
+                            let end_ts = if let Some(end) = end {
+                                jiff::Timestamp::from_second(end.timestamp()).unwrap()
+                            } else {
+                                jiff::Timestamp::now()
+                            };
+                            let duration = end_ts.duration_since(start_ts);
+                            if duration.as_secs() < 60 {
+                                format!("{}s", duration.as_secs())
+                            } else if duration.as_secs() < 3600 {
+                                format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
+                            } else {
+                                format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+                            }
+                        } else {
+                            "-".to_string()
+                        };
+
+                        let command_basename = Path::new(&task.command)
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or(&task.command);
+
+                        let shortened_path = tico::tico(&task.path.to_string_lossy());
+
                         let mut details = format!(
-                            "ID: {}\nCommand: {}\nPath: {}\nGroup: {}\nStatus: {:?}\n",
-                            id, task.command, task.path.display(), task.group, task.status
+                            "ID: {}\nStatus: {:?}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
+                            id, task.status, command_basename, shortened_path, duration_str, task.group
                         );
                         if let Some(label) = &task.label {
                             details.push_str(&format!("Label: {}\n", label));
                         }
+                        details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", task.command, task.path.display()));
                         details
                     } else {
                         "Task not found".to_string()
@@ -154,6 +228,8 @@ async fn run_app<B: ratatui::backend::Backend>(
             f.render_widget(footer, chunks[2]);
         })?;
 
+        // Calculate how much time is left until the next scheduled refresh (250ms).
+        // This ensures the TUI polls for input but still refreshes the state on schedule.
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or(Duration::from_secs(0));
@@ -163,7 +239,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                 match key.code {
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Char('j') | KeyCode::Down => {
-                        let i = match list_state.selected() {
+                        let i = match table_state.selected() {
                             Some(i) => {
                                 if i >= task_ids.len() - 1 {
                                     0
@@ -173,10 +249,10 @@ async fn run_app<B: ratatui::backend::Backend>(
                             }
                             None => 0,
                         };
-                        list_state.select(Some(i));
+                        table_state.select(Some(i));
                     }
                     KeyCode::Char('k') | KeyCode::Up => {
-                        let i = match list_state.selected() {
+                        let i = match table_state.selected() {
                             Some(i) => {
                                 if i == 0 {
                                     task_ids.len() - 1
@@ -186,31 +262,31 @@ async fn run_app<B: ratatui::backend::Backend>(
                             }
                             None => 0,
                         };
-                        list_state.select(Some(i));
+                        table_state.select(Some(i));
                     }
                     KeyCode::Char('s') => {
-                        if let Some(i) = list_state.selected() {
+                        if let Some(i) = table_state.selected() {
                             if let Some(id) = task_ids.get(i) {
                                 pueue_client.start_tasks(vec![*id]).await?;
                             }
                         }
                     }
                     KeyCode::Char('p') => {
-                        if let Some(i) = list_state.selected() {
+                        if let Some(i) = table_state.selected() {
                             if let Some(id) = task_ids.get(i) {
                                 pueue_client.pause_tasks(vec![*id]).await?;
                             }
                         }
                     }
                     KeyCode::Char('x') => {
-                        if let Some(i) = list_state.selected() {
+                        if let Some(i) = table_state.selected() {
                             if let Some(id) = task_ids.get(i) {
                                 pueue_client.kill_tasks(vec![*id]).await?;
                             }
                         }
                     }
                     KeyCode::Backspace => {
-                        if let Some(i) = list_state.selected() {
+                        if let Some(i) = table_state.selected() {
                             if let Some(id) = task_ids.get(i) {
                                 pueue_client.remove_tasks(vec![*id]).await?;
                             }
