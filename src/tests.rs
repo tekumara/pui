@@ -17,51 +17,44 @@ impl MockPueueClient {
     pub fn new() -> Self {
         let mut state = State::default();
 
-        // Fixed time for snapshot stability: 2024-01-01 00:00:00 (Local)
-        let now = Local.timestamp_opt(1704067200, 0).unwrap();
+        // Fixed time for snapshot stability: 2026-01-01 00:00:00 (Local)
+        let now = Local.timestamp_opt(1767225600, 0).unwrap();
 
-        let task1 = Task::new(
-            "sleep 60".to_string(),
-            PathBuf::from("/tmp"),
-            HashMap::new(),
-            "default".to_string(),
-            TaskStatus::Running {
+        let task1 = Task {
+            id: 0,
+            created_at: now,
+            original_command: "sleep 60".to_string(),
+            command: "sleep 60".to_string(),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Running {
                 enqueued_at: now,
                 start: now,
             },
-            vec![],
-            0,
-            None
-        );
-        // Task::new sets id to 0 by default probably, or we need to set it?
-        // Task::new doesn't take ID?
-        // Checking pui code: `s.tasks` is BTreeMap<usize, Task>.
-        // Task has `id` field. `Task::new` probably generates one or takes it?
-        // The error message for `new` showed:
-        // original_command, path, envs, group, status, dependencies, label.
-        // It didn't show `id`. So `Task::new` might not take `id`.
-        // We might need to set `task.id = 0;` manually after construction if field is pub.
+        };
 
-        let mut task1 = task1;
-        task1.id = 0;
-
-        let task2 = Task::new(
-            "echo 'hello'".to_string(),
-            PathBuf::from("/home/user"),
-            HashMap::new(),
-            "default".to_string(),
-            TaskStatus::Done {
+        let task2 = Task {
+            id: 1,
+            created_at: now,
+            original_command: "echo 'hello'".to_string(),
+            command: "echo 'hello'".to_string(),
+            path: PathBuf::from("/home/user"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Done {
                 enqueued_at: now,
                 start: now,
                 end: now,
                 result: TaskResult::Success,
             },
-            vec![],
-            0,
-            None
-        );
-        let mut task2 = task2;
-        task2.id = 1;
+        };
 
         state.tasks.insert(0, task1);
         state.tasks.insert(1, task2);
@@ -108,14 +101,22 @@ async fn test_ui_snapshot() -> Result<()> {
     let mut table_state = TableState::default();
     table_state.select(Some(0));
 
-    let now = Local.timestamp_opt(1704067200, 0).unwrap();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
     let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
 
     terminal.draw(|f| {
         ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now);
     })?;
 
-    insta::assert_debug_snapshot!(terminal.backend());
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
 
     Ok(())
 }
