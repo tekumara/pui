@@ -13,3 +13,12 @@ serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
 tico = "1.0.0"
 jiff = "0.1.14"
+
+[dev-dependencies]
+chrono = "0.4.42"
+insta = "1.46.0"
+
+# compile in release mode
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
