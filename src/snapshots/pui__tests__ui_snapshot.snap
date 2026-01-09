@@ -8,8 +8,8 @@ expression: buffer_string
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ──────────────────────────────┐┌ Details ────────────────────────────┐ 
  │   Id   Status     Com Pat Duration  ││ID: 0                                │ 
- │>> 0    Running {  sle /tm 0s        ││Status: Running { enqueued_at: 2026-0│ 
- │   1    Done { enq ech /h/ 0s        ││Command: sleep 60                    │ 
+ │>> 0    Running    sle /tm 0s        ││Status: Running                      │ 
+ │   1    Done       ech /h/ 0s        ││Command: sleep 60                    │ 
  │                                     ││Path: /tmp                           │ 
  │                                     ││Duration: 0s                         │ 
  │                                     ││Group: default                       │ 

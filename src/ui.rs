@@ -6,6 +6,18 @@ use ratatui::{
 };
 use std::path::Path;
 use pueue_lib::state::State;
+use pueue_lib::task::TaskStatus;
+
+fn status_name(status: &TaskStatus) -> &str {
+    match status {
+        TaskStatus::Locked { .. } => "Locked",
+        TaskStatus::Stashed { .. } => "Stashed",
+        TaskStatus::Queued { .. } => "Queued",
+        TaskStatus::Running { .. } => "Running",
+        TaskStatus::Paused { .. } => "Paused",
+        TaskStatus::Done { .. } => "Done",
+    }
+}
 
 pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp) {
     let chunks = Layout::default()
@@ -32,8 +44,8 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
 
     if let Some(s) = &state {
         let rows: Vec<Row> = s.tasks.iter().map(|(id, task)| {
-            let status = format!("{:?}", task.status);
-            let style = match status.as_str() {
+            let status = status_name(&task.status);
+            let style = match status {
                 "Running" => Style::default().fg(Color::Green),
                 "Queued" => Style::default().fg(Color::Yellow),
                 "Paused" => Style::default().fg(Color::Blue),
@@ -129,8 +141,8 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
                 let shortened_path = tico::tico(&task.path.to_string_lossy());
 
                 let mut details = format!(
-                    "ID: {}\nStatus: {:?}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
-                    id, task.status, command_basename, shortened_path, duration_str, task.group
+                    "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
+                    id, status_name(&task.status), command_basename, shortened_path, duration_str, task.group
                 );
                 if let Some(label) = &task.label {
                     details.push_str(&format!("Label: {}\n", label));
