@@ -1,0 +1,50 @@
+---
+source: src/tests.rs
+expression: terminal.backend()
+---
+TestBackend {
+    buffer: Buffer {
+        area: Rect { x: 0, y: 0, width: 80, height: 24 },
+        content: [
+            "                                                                                ",
+            " ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ ",
+            " │j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | q: Quit      │ ",
+            " └────────────────────────────────────────────────────────────────────────────┘ ",
+            " ┌ Tasks ──────────────────────────────┐┌ Details ────────────────────────────┐ ",
+            " │   Id   Status     Com Pat Duration  ││ID: 0                                │ ",
+            " │>> 0    Running {  sle /tm 0s        ││Status: Running { enqueued_at: 2024-0│ ",
+            " │   1    Done { enq ech /h/ 0s        ││Command: sleep 60                    │ ",
+            " │                                     ││Path: /tmp                           │ ",
+            " │                                     ││Duration: 0s                         │ ",
+            " │                                     ││Group: default                       │ ",
+            " │                                     ││                                     │ ",
+            " │                                     ││Full Command: sleep 60               │ ",
+            " │                                     ││Full Path: /tmp                      │ ",
+            " │                                     ││                                     │ ",
+            " │                                     ││                                     │ ",
+            " │                                     ││                                     │ ",
+            " │                                     ││                                     │ ",
+            " │                                     ││                                     │ ",
+            " └─────────────────────────────────────┘└─────────────────────────────────────┘ ",
+            " ┌────────────────────────────────────────────────────────────────────────────┐ ",
+            " │Connected to Pueue daemon                                                   │ ",
+            " └────────────────────────────────────────────────────────────────────────────┘ ",
+            "                                                                                ",
+        ],
+        styles: [
+            x: 0, y: 0, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+            x: 2, y: 5, fg: Cyan, bg: Reset, underline: Reset, modifier: BOLD,
+            x: 39, y: 5, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+            x: 2, y: 6, fg: Reset, bg: Rgb(50, 50, 50), underline: Reset, modifier: BOLD,
+            x: 39, y: 6, fg: Reset, bg: Reset, underline: Reset, modifier: NONE,
+        ]
+    },
+    scrollback: Buffer {
+        area: Rect { x: 0, y: 0, width: 80, height: 0 }
+    },
+    cursor: false,
+    pos: (
+        0,
+        0,
+    ),
+}

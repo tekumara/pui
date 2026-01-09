@@ -7,6 +7,14 @@ use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
 use pueue_lib::tls::load_certificate;
 
+pub trait PueueClientOps {
+    async fn get_state(&mut self) -> Result<State>;
+    async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
+    async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
+    async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
+    async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
+}
+
 pub struct PueueClient {
     client: Client,
 }
@@ -37,8 +45,10 @@ impl PueueClient {
 
         Ok(Self { client })
     }
+}
 
-    pub async fn get_state(&mut self) -> Result<State> {
+impl PueueClientOps for PueueClient {
+    async fn get_state(&mut self) -> Result<State> {
         self.client.send_request(Request::Status).await.map_err(|e| anyhow!("{:?}", e))?;
         let response = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
 
@@ -49,7 +59,7 @@ impl PueueClient {
         }
     }
 
-    pub async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+    async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
         self.client.send_request(Request::Start(StartRequest {
             tasks: TaskSelection::TaskIds(ids),
         })).await.map_err(|e| anyhow!("{:?}", e))?;
@@ -57,7 +67,7 @@ impl PueueClient {
         Ok(())
     }
 
-    pub async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+    async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
         self.client.send_request(Request::Pause(PauseRequest {
             tasks: TaskSelection::TaskIds(ids),
             wait: false,
@@ -66,7 +76,7 @@ impl PueueClient {
         Ok(())
     }
 
-    pub async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+    async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
         self.client.send_request(Request::Kill(KillRequest {
             tasks: TaskSelection::TaskIds(ids),
             signal: None,
@@ -75,7 +85,7 @@ impl PueueClient {
         Ok(())
     }
 
-    pub async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+    async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
         self.client.send_request(Request::Remove(ids)).await.map_err(|e| anyhow!("{:?}", e))?;
         let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
