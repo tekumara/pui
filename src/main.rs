@@ -120,7 +120,10 @@ enum AppMode {
 async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     pueue_client: &mut impl PueueClientOps,
-) -> Result<()> {
+) -> Result<()>
+where
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     let mut last_tick = Instant::now();
     let tick_rate = Duration::from_millis(250);
     let mut state: Option<State> = None;
