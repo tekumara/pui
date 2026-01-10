@@ -6,7 +6,7 @@ use ratatui::{
 };
 use std::path::Path;
 use pueue_lib::state::State;
-use pueue_lib::task::TaskStatus;
+use pueue_lib::task::{Task, TaskStatus};
 
 fn status_name(status: &TaskStatus) -> &str {
     match status {
@@ -16,6 +16,55 @@ fn status_name(status: &TaskStatus) -> &str {
         TaskStatus::Running { .. } => "Running",
         TaskStatus::Paused { .. } => "Paused",
         TaskStatus::Done { .. } => "Done",
+    }
+}
+
+struct FormattedTask<'a> {
+    id: String,
+    status: &'a str,
+    command: String,
+    path: String,
+    duration: String,
+    full_command: &'a str,
+    full_path: String,
+    group: &'a str,
+    label: Option<&'a str>,
+}
+
+fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> FormattedTask<'a> {
+    let (start, end) = task.start_and_end();
+    let duration_str = if let Some(start) = start {
+        let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
+        let end_ts = end.map(|e| jiff::Timestamp::from_second(e.timestamp()).unwrap()).unwrap_or_else(|| now.clone());
+        let duration = end_ts.duration_since(start_ts);
+
+        if duration.as_secs() < 60 {
+            format!("{}s", duration.as_secs())
+        } else if duration.as_secs() < 3600 {
+            format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
+        } else {
+            format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+        }
+    } else {
+        "-".to_string()
+    };
+
+    let command_basename = Path::new(&task.command)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(&task.command)
+        .to_string();
+
+    FormattedTask {
+        id: id.to_string(),
+        status: status_name(&task.status),
+        command: command_basename,
+        path: tico::tico(&task.path.to_string_lossy()),
+        duration: duration_str,
+        full_command: &task.command,
+        full_path: task.path.to_string_lossy().into_owned(),
+        group: &task.group,
+        label: task.label.as_deref(),
     }
 }
 
@@ -62,9 +111,9 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     let table_area = chunks[1];
 
     if let Some(s) = &state {
-        let rows: Vec<Row> = s.tasks.iter().map(|(id, task)| {
-            let status = status_name(&task.status);
-            let style = match status {
+        let rows: Vec<Row> = s.tasks.iter().map(|(&id, task)| {
+            let ft = format_task(id, task, &now);
+            let style = match ft.status {
                 "Running" => Style::default().fg(Color::Green),
                 "Queued" => Style::default().fg(Color::Yellow),
                 "Paused" => Style::default().fg(Color::Blue),
@@ -72,40 +121,12 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
                 _ => Style::default(),
             };
 
-            let command_basename = Path::new(&task.command)
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&task.command);
-
-            let shortened_path = tico::tico(&task.path.to_string_lossy());
-
-            let (start, end) = task.start_and_end();
-            let duration_str = if let Some(start) = start {
-                let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
-                let end_ts = if let Some(end) = end {
-                    jiff::Timestamp::from_second(end.timestamp()).unwrap()
-                } else {
-                    now.clone()
-                };
-                let duration = end_ts.duration_since(start_ts);
-
-                if duration.as_secs() < 60 {
-                    format!("{}s", duration.as_secs())
-                } else if duration.as_secs() < 3600 {
-                    format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
-                } else {
-                    format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
-                }
-            } else {
-                "-".to_string()
-            };
-
             Row::new(vec![
-                Cell::from(id.to_string()),
-                Cell::from(status),
-                Cell::from(command_basename.to_string()),
-                Cell::from(shortened_path),
-                Cell::from(duration_str),
+                Cell::from(ft.id),
+                Cell::from(ft.status),
+                Cell::from(ft.command),
+                Cell::from(ft.path),
+                Cell::from(ft.duration),
             ]).style(style)
         }).collect();
 
@@ -133,41 +154,16 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
 
             let details_text = if let Some(id) = selected_id {
                 if let Some(task) = s.tasks.get(id) {
-                    let (start, end) = task.start_and_end();
-                    let duration_str = if let Some(start) = start {
-                        let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
-                        let end_ts = if let Some(end) = end {
-                            jiff::Timestamp::from_second(end.timestamp()).unwrap()
-                        } else {
-                            now.clone()
-                        };
-                        let duration = end_ts.duration_since(start_ts);
-                        if duration.as_secs() < 60 {
-                            format!("{}s", duration.as_secs())
-                        } else if duration.as_secs() < 3600 {
-                            format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
-                        } else {
-                            format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
-                        }
-                    } else {
-                        "-".to_string()
-                    };
-
-                    let command_basename = Path::new(&task.command)
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or(&task.command);
-
-                    let shortened_path = tico::tico(&task.path.to_string_lossy());
+                    let ft = format_task(*id, task, &now);
 
                     let mut details = format!(
                         "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
-                        id, status_name(&task.status), command_basename, shortened_path, duration_str, task.group
+                        ft.id, ft.status, ft.command, ft.path, ft.duration, ft.group
                     );
-                    if let Some(label) = &task.label {
+                    if let Some(label) = ft.label {
                         details.push_str(&format!("Label: {}\n", label));
                     }
-                    details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", task.command, task.path.display()));
+                    details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", ft.full_command, ft.full_path));
                     details
                 } else {
                     "Task not found".to_string()
