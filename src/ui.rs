@@ -8,7 +8,7 @@ use std::path::Path;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 
-fn status_display(status: &TaskStatus) -> String {
+pub fn status_display(status: &TaskStatus) -> String {
     match status {
         TaskStatus::Locked { .. } => "Locked".to_string(),
         TaskStatus::Stashed { .. } => "Stashed".to_string(),
@@ -26,19 +26,19 @@ fn status_display(status: &TaskStatus) -> String {
     }
 }
 
-struct FormattedTask<'a> {
-    id: String,
-    status: String,
-    command: String,
-    path: String,
-    duration: String,
-    full_command: &'a str,
-    full_path: String,
-    group: &'a str,
-    label: Option<&'a str>,
+pub struct FormattedTask<'a> {
+    pub id: String,
+    pub status: String,
+    pub command: String,
+    pub path: String,
+    pub duration: String,
+    pub full_command: &'a str,
+    pub full_path: String,
+    pub group: &'a str,
+    pub label: Option<&'a str>,
 }
 
-fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> FormattedTask<'a> {
+pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> FormattedTask<'a> {
     let (start, end) = task.start_and_end();
     let duration_str = if let Some(start) = start {
         let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
@@ -96,7 +96,7 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool) {
+pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool, filter_text: &str, input_mode: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -110,7 +110,7 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("j/k: Nav | f: Filter | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
@@ -118,7 +118,9 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     let table_area = chunks[1];
 
     if let Some(s) = &state {
-        let rows: Vec<Row> = s.tasks.iter().map(|(&id, task)| {
+        let rows: Vec<Row> = task_ids.iter().filter_map(|id| {
+            s.tasks.get(id).map(|task| (*id, task))
+        }).map(|(id, task)| {
             let ft = format_task(id, task, &now);
             let style = if ft.status == "Running" || ft.status == "Success" {
                 Style::default().fg(Color::Green)
@@ -197,7 +199,15 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         f.render_widget(loading, table_area);
     }
 
-    let footer = Paragraph::new("Connected to Pueue daemon")
+    let footer_text = if input_mode {
+        format!("Filter: {}_ (Esc to clear)", filter_text)
+    } else if !filter_text.is_empty() {
+        format!("Filter: {} (Esc to clear)", filter_text)
+    } else {
+        "Connected to Pueue daemon".to_string()
+    };
+
+    let footer = Paragraph::new(footer_text)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
 }
