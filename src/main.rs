@@ -175,6 +175,43 @@ async fn run_app<B: ratatui::backend::Backend>(
                                     };
                                     table_state.select(Some(i));
                                 }
+                                KeyCode::PageUp => {
+                                    if !task_ids.is_empty() {
+                                        let offset = table_state.offset();
+                                        let selected = table_state.selected().unwrap_or(0);
+                                        if selected > offset {
+                                            table_state.select(Some(offset));
+                                        } else {
+                                            let terminal_size = terminal.size()?;
+                                            let visible_rows = terminal_size.height.saturating_sub(11) as usize;
+                                            table_state.select(Some(selected.saturating_sub(visible_rows)));
+                                        }
+                                    }
+                                }
+                                KeyCode::PageDown => {
+                                    if !task_ids.is_empty() {
+                                        let terminal_size = terminal.size()?;
+                                        let visible_rows = terminal_size.height.saturating_sub(11) as usize;
+                                        let offset = table_state.offset();
+                                        let bottom = (offset + visible_rows).saturating_sub(1).min(task_ids.len().saturating_sub(1));
+                                        let selected = table_state.selected().unwrap_or(0);
+                                        if selected < bottom {
+                                            table_state.select(Some(bottom));
+                                        } else {
+                                            table_state.select(Some((selected + visible_rows).min(task_ids.len().saturating_sub(1))));
+                                        }
+                                    }
+                                }
+                                KeyCode::Home => {
+                                    if !task_ids.is_empty() {
+                                        table_state.select(Some(0));
+                                    }
+                                }
+                                KeyCode::End => {
+                                    if !task_ids.is_empty() {
+                                        table_state.select(Some(task_ids.len().saturating_sub(1)));
+                                    }
+                                }
                                 KeyCode::Char('f') => {
                                     app_mode = AppMode::Filter;
                                 }

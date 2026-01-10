@@ -123,7 +123,7 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("j/k: Nav | f: Filter | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
