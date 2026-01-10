@@ -55,6 +55,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+enum AppMode {
+    Normal,
+    Filter,
+}
+
 async fn run_app<B: ratatui::backend::Backend>(
     terminal: &mut Terminal<B>,
     pueue_client: &mut impl PueueClientOps,
@@ -65,6 +70,8 @@ async fn run_app<B: ratatui::backend::Backend>(
     let mut table_state = TableState::default();
     table_state.select(Some(0));
     let mut show_details = false;
+    let mut app_mode = AppMode::Normal;
+    let mut filter_text = String::new();
 
     loop {
         if state.is_none() || last_tick.elapsed() >= tick_rate {
@@ -75,11 +82,40 @@ async fn run_app<B: ratatui::backend::Backend>(
         }
 
         let task_ids: Vec<usize> = state.as_ref()
-            .map(|s| s.tasks.keys().cloned().collect())
+            .map(|s| {
+                let now = jiff::Timestamp::now();
+                let mut ids: Vec<usize> = s.tasks.iter()
+                    .filter(|(id, task)| {
+                        if filter_text.is_empty() {
+                            true
+                        } else {
+                            let ft = ui::format_task(**id, task, &now);
+                            let text = filter_text.to_lowercase();
+
+                            ft.status.to_lowercase().contains(&text) ||
+                            ft.command.to_lowercase().contains(&text) ||
+                            ft.path.to_lowercase().contains(&text) ||
+                            ft.id.to_lowercase().contains(&text)
+                        }
+                    })
+                    .map(|(id, _)| *id)
+                    .collect();
+                ids.sort();
+                ids
+            })
             .unwrap_or_default();
 
         terminal.draw(|f| {
-            ui::draw(f, &state, &mut table_state, &task_ids, jiff::Timestamp::now(), show_details);
+            ui::draw(
+                f,
+                &state,
+                &mut table_state,
+                &task_ids,
+                jiff::Timestamp::now(),
+                show_details,
+                &filter_text,
+                matches!(app_mode, AppMode::Filter)
+            );
         })?;
 
         // Calculate how much time is left until the next scheduled refresh (250ms).
@@ -90,75 +126,109 @@ async fn run_app<B: ratatui::backend::Backend>(
 
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                if show_details {
-                     match key.code {
-                         KeyCode::Esc => show_details = false,
-                         KeyCode::Char('q') => return Ok(()),
-                         _ => {} // Ignore other keys when details popup is open, or maybe allow 'd' to toggle?
-                     }
-                } else {
-                    match key.code {
-                        KeyCode::Char('q') => return Ok(()),
-                        KeyCode::Char('d') => {
-                            if table_state.selected().is_some() {
-                                show_details = true;
-                            }
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            let i = match table_state.selected() {
-                                Some(i) => {
-                                    if i >= task_ids.len() - 1 {
-                                        0
-                                    } else {
-                                        i + 1
+                match app_mode {
+                    AppMode::Filter => {
+                         match key.code {
+                             KeyCode::Esc => {
+                                 app_mode = AppMode::Normal;
+                                 filter_text.clear();
+                             }
+                             KeyCode::Enter => {
+                                 app_mode = AppMode::Normal;
+                             }
+                             KeyCode::Backspace => {
+                                 filter_text.pop();
+                             }
+                             KeyCode::Char(c) => {
+                                 filter_text.push(c);
+                             }
+                             _ => {}
+                         }
+                    }
+                    AppMode::Normal => {
+                        if show_details {
+                             match key.code {
+                                 KeyCode::Esc => show_details = false,
+                                 KeyCode::Char('q') => return Ok(()),
+                                 _ => {} // Ignore other keys when details popup is open, or maybe allow 'd' to toggle?
+                             }
+                        } else {
+                            match key.code {
+                                KeyCode::Char('q') => return Ok(()),
+                                KeyCode::Esc => {
+                                    if !filter_text.is_empty() {
+                                        filter_text.clear();
                                     }
                                 }
-                                None => 0,
-                            };
-                            table_state.select(Some(i));
-                        }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            let i = match table_state.selected() {
-                                Some(i) => {
-                                    if i == 0 {
-                                        task_ids.len() - 1
-                                    } else {
-                                        i - 1
+                                KeyCode::Char('d') => {
+                                    if table_state.selected().is_some() {
+                                        show_details = true;
                                     }
                                 }
-                                None => 0,
-                            };
-                            table_state.select(Some(i));
-                        }
-                        KeyCode::Char('s') => {
-                            if let Some(i) = table_state.selected() {
-                                if let Some(id) = task_ids.get(i) {
-                                    pueue_client.start_tasks(vec![*id]).await?;
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    let i = match table_state.selected() {
+                                        Some(i) => {
+                                            if task_ids.is_empty() {
+                                                0
+                                            } else if i >= task_ids.len().saturating_sub(1) {
+                                                0
+                                            } else {
+                                                i + 1
+                                            }
+                                        }
+                                        None => 0,
+                                    };
+                                    table_state.select(Some(i));
                                 }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    let i = match table_state.selected() {
+                                        Some(i) => {
+                                            if task_ids.is_empty() {
+                                                0
+                                            } else if i == 0 {
+                                                task_ids.len().saturating_sub(1)
+                                            } else {
+                                                i - 1
+                                            }
+                                        }
+                                        None => 0,
+                                    };
+                                    table_state.select(Some(i));
+                                }
+                                KeyCode::Char('f') => {
+                                    app_mode = AppMode::Filter;
+                                }
+                                KeyCode::Char('s') => {
+                                    if let Some(i) = table_state.selected() {
+                                        if let Some(id) = task_ids.get(i) {
+                                            pueue_client.start_tasks(vec![*id]).await?;
+                                        }
+                                    }
+                                }
+                                KeyCode::Char('p') => {
+                                    if let Some(i) = table_state.selected() {
+                                        if let Some(id) = task_ids.get(i) {
+                                            pueue_client.pause_tasks(vec![*id]).await?;
+                                        }
+                                    }
+                                }
+                                KeyCode::Char('x') => {
+                                    if let Some(i) = table_state.selected() {
+                                        if let Some(id) = task_ids.get(i) {
+                                            pueue_client.kill_tasks(vec![*id]).await?;
+                                        }
+                                    }
+                                }
+                                KeyCode::Backspace => {
+                                    if let Some(i) = table_state.selected() {
+                                        if let Some(id) = task_ids.get(i) {
+                                            pueue_client.remove_tasks(vec![*id]).await?;
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
-                        KeyCode::Char('p') => {
-                            if let Some(i) = table_state.selected() {
-                                if let Some(id) = task_ids.get(i) {
-                                    pueue_client.pause_tasks(vec![*id]).await?;
-                                }
-                            }
-                        }
-                        KeyCode::Char('x') => {
-                            if let Some(i) = table_state.selected() {
-                                if let Some(id) = task_ids.get(i) {
-                                    pueue_client.kill_tasks(vec![*id]).await?;
-                                }
-                            }
-                        }
-                        KeyCode::Backspace => {
-                            if let Some(i) = table_state.selected() {
-                                if let Some(id) = task_ids.get(i) {
-                                    pueue_client.remove_tasks(vec![*id]).await?;
-                                }
-                            }
-                        }
-                        _ => {}
                     }
                 }
             }

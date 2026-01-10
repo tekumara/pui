@@ -131,7 +131,7 @@ async fn test_ui_snapshot() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -154,7 +154,45 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true, "", false);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ui_snapshot_filter_active() -> Result<()> {
+    let (state, _, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    // Filter tasks by "1"
+    let task_ids: Vec<usize> = state.tasks.iter()
+        .filter(|(id, task)| {
+            let ft = ui::format_task(**id, task, &jiff_now);
+            let text = "1".to_lowercase();
+
+            ft.status.to_lowercase().contains(&text) ||
+            ft.command.to_lowercase().contains(&text) ||
+            ft.path.to_lowercase().contains(&text) ||
+            ft.id.to_lowercase().contains(&text)
+        })
+        .map(|(id, _)| *id)
+        .collect();
+
+    // Show filter active state with "1" as text
+    terminal.draw(|f| {
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "1", false);
     })?;
 
     let buffer = terminal.backend().buffer();
