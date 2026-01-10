@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap},
     Frame,
 };
 use std::path::Path;
@@ -127,8 +127,11 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             .borders(Borders::ALL)
             .title(" Task Log (Esc to close) ");
 
+        // default tab stop width in terminals is typically 8 characters
+        let logs = logs.replace('\t', "        ");
         let p = Paragraph::new(logs)
             .block(block)
+            .wrap(Wrap { trim: false })
             .scroll((scroll_offset, 0)); // (y, x)
 
         f.render_widget(p, size);
