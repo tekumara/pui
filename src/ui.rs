@@ -109,7 +109,24 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool, filter_text: &str, input_mode: bool) {
+pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool, filter_text: &str, input_mode: bool, log_view: Option<(&str, u16)>) {
+    if let Some((logs, scroll_offset)) = log_view {
+        let size = f.area();
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Task Log (Esc to close) ");
+
+        // Calculate scroll based on scroll_offset
+        // Since Paragraph scrolling uses u16 for line offset
+
+        let p = Paragraph::new(logs)
+            .block(block)
+            .scroll((scroll_offset, 0)); // (y, x)
+
+        f.render_widget(p, size);
+        return;
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)

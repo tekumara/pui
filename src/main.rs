@@ -58,6 +58,12 @@ async fn main() -> Result<()> {
 enum AppMode {
     Normal,
     Filter,
+    Log {
+        task_id: usize,
+        logs: String,
+        scroll_offset: u16,
+        autoscroll: bool,
+    },
 }
 
 async fn run_app<B: ratatui::backend::Backend>(
@@ -74,10 +80,19 @@ async fn run_app<B: ratatui::backend::Backend>(
     let mut filter_text = String::new();
 
     loop {
-        if state.is_none() || last_tick.elapsed() >= tick_rate {
+        let should_fetch = state.is_none() || last_tick.elapsed() >= tick_rate;
+        if should_fetch {
             if let Ok(new_state) = pueue_client.get_state().await {
                 state = Some(new_state);
             }
+
+            // Fetch logs if in Log mode
+            if let AppMode::Log { task_id, logs, .. } = &mut app_mode {
+                if let Ok(Some(new_logs)) = pueue_client.get_task_log(*task_id).await {
+                    *logs = new_logs;
+                }
+            }
+
             last_tick = Instant::now();
         }
 
@@ -96,6 +111,12 @@ async fn run_app<B: ratatui::backend::Backend>(
             .unwrap_or_default();
 
         terminal.draw(|f| {
+            let log_view = if let AppMode::Log { logs, scroll_offset, .. } = &app_mode {
+                Some((logs.as_str(), *scroll_offset))
+            } else {
+                None
+            };
+
             ui::draw(
                 f,
                 &state,
@@ -104,7 +125,8 @@ async fn run_app<B: ratatui::backend::Backend>(
                 jiff::Timestamp::now(),
                 show_details,
                 &filter_text,
-                matches!(app_mode, AppMode::Filter)
+                matches!(app_mode, AppMode::Filter),
+                log_view,
             );
         })?;
 
@@ -116,15 +138,16 @@ async fn run_app<B: ratatui::backend::Backend>(
 
         if event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
-                match app_mode {
+                let mut next_mode = None;
+                match &mut app_mode {
                     AppMode::Filter => {
                          match key.code {
                              KeyCode::Esc => {
-                                 app_mode = AppMode::Normal;
+                                 next_mode = Some(AppMode::Normal);
                                  filter_text.clear();
                              }
                              KeyCode::Enter => {
-                                 app_mode = AppMode::Normal;
+                                 next_mode = Some(AppMode::Normal);
                              }
                              KeyCode::Backspace => {
                                  filter_text.pop();
@@ -135,12 +158,49 @@ async fn run_app<B: ratatui::backend::Backend>(
                              _ => {}
                          }
                     }
+                    AppMode::Log { logs, scroll_offset, autoscroll, .. } => {
+                        let terminal_height = terminal.size()?.height;
+                        let page_height = terminal_height.saturating_sub(2);
+
+                        match key.code {
+                            KeyCode::Esc => next_mode = Some(AppMode::Normal),
+                            KeyCode::Char('j') | KeyCode::Down => {
+                                *scroll_offset = scroll_offset.saturating_add(1);
+                                *autoscroll = false;
+                            }
+                            KeyCode::Char('k') | KeyCode::Up => {
+                                *scroll_offset = scroll_offset.saturating_sub(1);
+                                *autoscroll = false;
+                            }
+                            KeyCode::PageUp => {
+                                *scroll_offset = scroll_offset.saturating_sub(page_height);
+                                *autoscroll = false;
+                            }
+                            KeyCode::PageDown => {
+                                *scroll_offset = scroll_offset.saturating_add(page_height);
+                                *autoscroll = false;
+                            }
+                            KeyCode::Home => {
+                                *scroll_offset = 0;
+                                *autoscroll = false;
+                            }
+                            KeyCode::End => {
+                                *autoscroll = true;
+                            }
+                            _ => {}
+                        }
+
+                        if *autoscroll {
+                            let lines = logs.lines().count() as u16;
+                            *scroll_offset = lines.saturating_sub(page_height);
+                        }
+                    }
                     AppMode::Normal => {
                         if show_details {
                              match key.code {
                                  KeyCode::Esc => show_details = false,
                                  KeyCode::Char('q') => return Ok(()),
-                                 _ => {} // Ignore other keys when details popup is open, or maybe allow 'd' to toggle?
+                                 _ => {}
                              }
                         } else {
                             match key.code {
@@ -148,6 +208,18 @@ async fn run_app<B: ratatui::backend::Backend>(
                                 KeyCode::Esc => {
                                     if !filter_text.is_empty() {
                                         filter_text.clear();
+                                    }
+                                }
+                                KeyCode::Enter => {
+                                    if let Some(i) = table_state.selected() {
+                                        if let Some(id) = task_ids.get(i) {
+                                            next_mode = Some(AppMode::Log {
+                                                task_id: *id,
+                                                logs: String::new(),
+                                                scroll_offset: 0,
+                                                autoscroll: true,
+                                            });
+                                        }
                                     }
                                 }
                                 KeyCode::Char('d') => {
@@ -253,6 +325,10 @@ async fn run_app<B: ratatui::backend::Backend>(
                             }
                         }
                     }
+                }
+
+                if let Some(mode) = next_mode {
+                    app_mode = mode;
                 }
             }
         }
