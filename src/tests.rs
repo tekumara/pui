@@ -163,7 +163,7 @@ async fn test_ui_snapshot() -> Result<()> {
 
 #[tokio::test]
 async fn test_ui_snapshot_with_details() -> Result<()> {
-    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
+    let (mut state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
     let mut table_state = TableState::default();
     table_state.select(Some(0));
 
@@ -308,7 +308,12 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
     let mut table_state = TableState::default();
     table_state.select(Some(0));
 
-    let logs = "Log line 1\nLog line 2\nLog line 3";
+    // Log with tabs and long lines
+    let logs = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\
+                \t- Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\
+                \t- Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\
+                Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n\
+                Long line: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.";
     let scroll_offset = 0;
 
     terminal.draw(|f| {
