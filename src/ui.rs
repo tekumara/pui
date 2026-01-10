@@ -38,6 +38,19 @@ pub struct FormattedTask<'a> {
     pub label: Option<&'a str>,
 }
 
+impl<'a> FormattedTask<'a> {
+    pub fn matches_filter(&self, filter: &str) -> bool {
+        if filter.is_empty() {
+            return true;
+        }
+        let filter = filter.to_lowercase();
+        self.id.to_lowercase().contains(&filter)
+            || self.status.to_lowercase().contains(&filter)
+            || self.command.to_lowercase().contains(&filter)
+            || self.path.to_lowercase().contains(&filter)
+    }
+}
+
 pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> FormattedTask<'a> {
     let (start, end) = task.start_and_end();
     let duration_str = if let Some(start) = start {
