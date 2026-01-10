@@ -1,6 +1,6 @@
 ---
 source: src/tests.rs
-assertion_line: 119
+assertion_line: 155
 expression: buffer_string
 ---
                                                                                 
@@ -8,20 +8,20 @@ expression: buffer_string
  │j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │   Id   Status     Command                Path                   Duration   │ 
- │>> 0    Running    sleep 60               /tmp                   0s         │ 
- │   1    Done       echo 'hello'           /h/user                0s         │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
- │                                                                            │ 
+ │   Id   Status┌ Details (Esc to close) ──────────────────────┐   Duration   │ 
+ │>> 0    Runnin│ID: 0                                         │   0s         │ 
+ │   1    Done  │Status: Running                               │   0s         │ 
+ │              │Command: sleep 60                             │              │ 
+ │              │Path: /tmp                                    │              │ 
+ │              │Duration: 0s                                  │              │ 
+ │              │Group: default                                │              │ 
+ │              │                                              │              │ 
+ │              │Full Command: sleep 60                        │              │ 
+ │              │Full Path: /tmp                               │              │ 
+ │              │                                              │              │ 
+ │              │                                              │              │ 
+ │              │                                              │              │ 
+ │              └──────────────────────────────────────────────┘              │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌────────────────────────────────────────────────────────────────────────────┐ 
  │Connected to Pueue daemon                                                   │ 

@@ -1,7 +1,7 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Row, Table, TableState, Paragraph},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState},
     Frame,
 };
 use std::path::Path;
@@ -19,7 +19,28 @@ fn status_name(status: &TaskStatus) -> &str {
     }
 }
 
-pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp) {
+/// helper function to create a centered rect using up certain percentage of the available rect `r`
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -33,14 +54,12 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | q: Quit")
+    let title = Paragraph::new("j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
-    let main_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-        .split(chunks[1]);
+    // Use full width for the table (chunks[1])
+    let table_area = chunks[1];
 
     if let Some(s) = &state {
         let rows: Vec<Row> = s.tasks.iter().map(|(id, task)| {
@@ -105,64 +124,70 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         .row_highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Rgb(50, 50, 50)))
         .highlight_symbol(">> ");
 
-        f.render_stateful_widget(task_table, main_chunks[0], table_state);
+        f.render_stateful_widget(task_table, table_area, table_state);
 
-        // Task Details
-        let selected_id = table_state.selected()
-            .and_then(|i| task_ids.get(i));
+        // Task Details Popup
+        if show_details {
+            let selected_id = table_state.selected()
+                .and_then(|i| task_ids.get(i));
 
-        let details_text = if let Some(id) = selected_id {
-            if let Some(task) = s.tasks.get(id) {
-                let (start, end) = task.start_and_end();
-                let duration_str = if let Some(start) = start {
-                    let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
-                    let end_ts = if let Some(end) = end {
-                        jiff::Timestamp::from_second(end.timestamp()).unwrap()
+            let details_text = if let Some(id) = selected_id {
+                if let Some(task) = s.tasks.get(id) {
+                    let (start, end) = task.start_and_end();
+                    let duration_str = if let Some(start) = start {
+                        let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
+                        let end_ts = if let Some(end) = end {
+                            jiff::Timestamp::from_second(end.timestamp()).unwrap()
+                        } else {
+                            now.clone()
+                        };
+                        let duration = end_ts.duration_since(start_ts);
+                        if duration.as_secs() < 60 {
+                            format!("{}s", duration.as_secs())
+                        } else if duration.as_secs() < 3600 {
+                            format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
+                        } else {
+                            format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+                        }
                     } else {
-                        now.clone()
+                        "-".to_string()
                     };
-                    let duration = end_ts.duration_since(start_ts);
-                    if duration.as_secs() < 60 {
-                        format!("{}s", duration.as_secs())
-                    } else if duration.as_secs() < 3600 {
-                        format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
-                    } else {
-                        format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+
+                    let command_basename = Path::new(&task.command)
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(&task.command);
+
+                    let shortened_path = tico::tico(&task.path.to_string_lossy());
+
+                    let mut details = format!(
+                        "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
+                        id, status_name(&task.status), command_basename, shortened_path, duration_str, task.group
+                    );
+                    if let Some(label) = &task.label {
+                        details.push_str(&format!("Label: {}\n", label));
                     }
+                    details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", task.command, task.path.display()));
+                    details
                 } else {
-                    "-".to_string()
-                };
-
-                let command_basename = Path::new(&task.command)
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or(&task.command);
-
-                let shortened_path = tico::tico(&task.path.to_string_lossy());
-
-                let mut details = format!(
-                    "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
-                    id, status_name(&task.status), command_basename, shortened_path, duration_str, task.group
-                );
-                if let Some(label) = &task.label {
-                    details.push_str(&format!("Label: {}\n", label));
+                    "Task not found".to_string()
                 }
-                details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", task.command, task.path.display()));
-                details
             } else {
-                "Task not found".to_string()
-            }
-        } else {
-            "No task selected".to_string()
-        };
+                "No task selected".to_string()
+            };
 
-        let details = Paragraph::new(details_text)
-            .block(Block::default().borders(Borders::ALL).title(" Details "));
-        f.render_widget(details, main_chunks[1]);
+            let area = centered_rect(60, 60, f.area());
+            f.render_widget(Clear, area); // Clear the background
+
+            let details_block = Paragraph::new(details_text)
+                .block(Block::default().borders(Borders::ALL).title(" Details (Esc to close) "));
+            f.render_widget(details_block, area);
+        }
+
     } else {
         let loading = Paragraph::new("Loading state from Pueue...")
             .block(Block::default().borders(Borders::ALL).title(" Tasks "));
-        f.render_widget(loading, main_chunks[0]);
+        f.render_widget(loading, table_area);
     }
 
     let footer = Paragraph::new("Connected to Pueue daemon")
