@@ -8,18 +8,18 @@ expression: buffer_string
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
  │   Id   Status┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
- │>> 0    Runnin│ID: 0                                         │    0s        │ 
+ │>> 0    Runnin│ID: 0                                         │/w/ 0s        │ 
  │   1    Succes│Status: Running                               │    0s        │ 
- │   2    Failed│Command: sleep 60                             │    0s        │ 
- │              │Path: /tmp                                    │              │ 
+ │   2    Failed│Command: long_command --option1 value1        │    0s        │ 
+ │              │--option2 value2 --option3 value3 --option4   │              │ 
+ │              │value4 --option5 value5 --option6 value6      │              │ 
+ │              │Path: /v/l/p/t/a/d/t/s/d/w/a/s/p/i/t/u/view   │              │ 
  │              │Duration: 0s                                  │              │ 
  │              │Group: default                                │              │ 
  │              │                                              │              │ 
- │              │Full Command: sleep 60                        │              │ 
- │              │Full Path: /tmp                               │              │ 
- │              │                                              │              │ 
- │              │                                              │              │ 
- │              │                                              │              │ 
+ │              │Full Command: long_command --option1 value1   │              │ 
+ │              │--option2 value2 --option3 value3 --option4   │              │ 
+ │              │value4 --option5 value5 --option6 value6      │              │ 
  │              └──────────────────────────────────────────────┘              │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌────────────────────────────────────────────────────────────────────────────┐ 
