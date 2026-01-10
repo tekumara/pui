@@ -247,7 +247,8 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             f.render_widget(Clear, area); // Clear the background
 
             let details_block = Paragraph::new(details_text)
-                .block(Block::default().borders(Borders::ALL).title(" Details (Esc to close) "));
+                .block(Block::default().borders(Borders::ALL).title(" Details (Esc to close) "))
+                .wrap(Wrap { trim: false });
             f.render_widget(details_block, area);
         }
 

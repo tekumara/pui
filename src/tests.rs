@@ -167,6 +167,12 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
     let mut table_state = TableState::default();
     table_state.select(Some(0));
 
+    // Add a long command and path to demonstrate wrapping
+    if let Some(task) = state.tasks.get_mut(&0) {
+        task.command = "long_command --option1 value1 --option2 value2 --option3 value3 --option4 value4 --option5 value5 --option6 value6".to_string();
+        task.path = PathBuf::from("/very/long/path/to/a/directory/that/should/definitely/wrap/at/some/point/in/the/ui/view");
+    }
+
     terminal.draw(|f| {
         let mut ui_state = ui::UiState {
             state: &Some(state),
