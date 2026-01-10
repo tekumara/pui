@@ -105,7 +105,43 @@ async fn test_ui_snapshot() -> Result<()> {
     let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ui_snapshot_with_details() -> Result<()> {
+    // Set TZ to UTC for consistent snapshots across environments
+    unsafe {
+        std::env::set_var("TZ", "UTC");
+    }
+
+    let mut client = MockPueueClient::new();
+    let state = client.get_state().await?;
+    let task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+    let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
+
+    terminal.draw(|f| {
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true);
     })?;
 
     let buffer = terminal.backend().buffer();
