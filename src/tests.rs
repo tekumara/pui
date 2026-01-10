@@ -103,6 +103,10 @@ impl PueueClientOps for MockPueueClient {
     async fn remove_tasks(&mut self, _ids: Vec<usize>) -> Result<()> {
         Ok(())
     }
+
+    async fn get_task_log(&mut self, _id: usize) -> Result<Option<String>> {
+        Ok(Some("Log line 1\nLog line 2\nLog line 3".to_string()))
+    }
 }
 
 async fn setup_test_ui() -> Result<(State, Vec<usize>, Terminal<TestBackend>, jiff::Timestamp)> {
@@ -131,7 +135,7 @@ async fn test_ui_snapshot() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false, None);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -154,7 +158,7 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true, "", false);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true, "", false, None);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -210,7 +214,7 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
     table_state.select(Some(task_ids.len().saturating_sub(1)));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false, None);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -242,7 +246,43 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
 
     // Show filter active state with "1" as text
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "1", false);
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "1", false, None);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ui_snapshot_log_view() -> Result<()> {
+    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    let logs = "Log line 1\nLog line 2\nLog line 3";
+    let scroll_offset = 0;
+
+    terminal.draw(|f| {
+        ui::draw(
+            f,
+            &Some(state),
+            &mut table_state,
+            &task_ids,
+            jiff_now,
+            false,
+            "",
+            false,
+            Some((logs, scroll_offset))
+        );
     })?;
 
     let buffer = terminal.backend().buffer();

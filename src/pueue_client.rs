@@ -7,12 +7,16 @@ use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
 use pueue_lib::tls::load_certificate;
 
+use snap::read::FrameDecoder;
+use std::io::Read;
+
 pub trait PueueClientOps {
     async fn get_state(&mut self) -> Result<State>;
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
+    async fn get_task_log(&mut self, id: usize) -> Result<Option<String>>;
 }
 
 pub struct PueueClient {
@@ -89,5 +93,32 @@ impl PueueClientOps for PueueClient {
         self.client.send_request(Request::Remove(ids)).await.map_err(|e| anyhow!("{:?}", e))?;
         let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
+    }
+
+    async fn get_task_log(&mut self, id: usize) -> Result<Option<String>> {
+        self.client.send_request(Request::Log(LogRequest {
+            tasks: TaskSelection::TaskIds(vec![id]),
+            send_logs: true,
+            lines: None,
+        })).await.map_err(|e| anyhow!("{:?}", e))?;
+
+        let response = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+
+        if let Response::Log(mut logs) = response {
+            if let Some(task_log) = logs.remove(&id) {
+                Ok(task_log.output.map(|b| {
+                    let mut decoder = FrameDecoder::new(&b[..]);
+                    let mut decompressed = Vec::new();
+                    match decoder.read_to_end(&mut decompressed) {
+                        Ok(_) => String::from_utf8_lossy(&decompressed).into_owned(),
+                        Err(_) => String::from_utf8_lossy(&b).into_owned(),
+                    }
+                }))
+            } else {
+                Err(anyhow!("Task log not found in response"))
+            }
+        } else {
+            Err(anyhow!("Unexpected response from pueue daemon: {:?}", response))
+        }
     }
 }
