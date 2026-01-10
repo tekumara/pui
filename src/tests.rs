@@ -135,7 +135,17 @@ async fn test_ui_snapshot() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false, None);
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now.clone(),
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: None,
+        };
+        ui::draw(f, &mut ui_state);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -158,7 +168,17 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
     table_state.select(Some(0));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true, "", false, None);
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: true,
+            filter_text: "",
+            input_mode: false,
+            log_view: None,
+        };
+        ui::draw(f, &mut ui_state);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -214,7 +234,17 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
     table_state.select(Some(task_ids.len().saturating_sub(1)));
 
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false, None);
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now.clone(),
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: None,
+        };
+        ui::draw(f, &mut ui_state);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -246,7 +276,17 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
 
     // Show filter active state with "1" as text
     terminal.draw(|f| {
-        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "1", false, None);
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "1",
+            input_mode: false,
+            log_view: None,
+        };
+        ui::draw(f, &mut ui_state);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -272,16 +312,19 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
     let scroll_offset = 0;
 
     terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: Some((logs, scroll_offset)),
+        };
         ui::draw(
             f,
-            &Some(state),
-            &mut table_state,
-            &task_ids,
-            jiff_now,
-            false,
-            "",
-            false,
-            Some((logs, scroll_offset))
+            &mut ui_state
         );
     })?;
 

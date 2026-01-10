@@ -55,15 +55,66 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+pub struct LogState {
+    pub task_id: usize,
+    pub logs: String,
+    pub scroll_offset: u16,
+    pub autoscroll: bool,
+}
+
+impl LogState {
+    fn new(task_id: usize) -> Self {
+        Self {
+            task_id,
+            logs: String::new(),
+            scroll_offset: 0,
+            autoscroll: true,
+        }
+    }
+
+    fn handle_key(&mut self, key_code: KeyCode, page_height: u16) -> bool {
+        match key_code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.scroll_offset = self.scroll_offset.saturating_add(1);
+                self.autoscroll = false;
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(1);
+                self.autoscroll = false;
+            }
+            KeyCode::PageUp => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(page_height);
+                self.autoscroll = false;
+            }
+            KeyCode::PageDown => {
+                self.scroll_offset = self.scroll_offset.saturating_add(page_height);
+                self.autoscroll = false;
+            }
+            KeyCode::Home => {
+                self.scroll_offset = 0;
+                self.autoscroll = false;
+            }
+            KeyCode::End => {
+                self.autoscroll = true;
+                self.update_autoscroll(page_height);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn update_autoscroll(&mut self, page_height: u16) {
+        if self.autoscroll {
+            let lines = self.logs.lines().count() as u16;
+            self.scroll_offset = lines.saturating_sub(page_height);
+        }
+    }
+}
+
 enum AppMode {
     Normal,
     Filter,
-    Log {
-        task_id: usize,
-        logs: String,
-        scroll_offset: u16,
-        autoscroll: bool,
-    },
+    Log(LogState),
 }
 
 async fn run_app<B: ratatui::backend::Backend>(
@@ -87,9 +138,10 @@ async fn run_app<B: ratatui::backend::Backend>(
             }
 
             // Fetch logs if in Log mode
-            if let AppMode::Log { task_id, logs, .. } = &mut app_mode {
-                if let Ok(Some(new_logs)) = pueue_client.get_task_log(*task_id).await {
-                    *logs = new_logs;
+            if let AppMode::Log(log_state) = &mut app_mode {
+                if let Ok(Some(new_logs)) = pueue_client.get_task_log(log_state.task_id).await {
+                    log_state.logs = new_logs;
+                    // We'll update autoscroll later in the loop after we have the terminal size
                 }
             }
 
@@ -111,23 +163,24 @@ async fn run_app<B: ratatui::backend::Backend>(
             .unwrap_or_default();
 
         terminal.draw(|f| {
-            let log_view = if let AppMode::Log { logs, scroll_offset, .. } = &app_mode {
-                Some((logs.as_str(), *scroll_offset))
+            let log_view = if let AppMode::Log(log_state) = &app_mode {
+                Some((log_state.logs.as_str(), log_state.scroll_offset))
             } else {
                 None
             };
 
-            ui::draw(
-                f,
-                &state,
-                &mut table_state,
-                &task_ids,
-                jiff::Timestamp::now(),
+            let mut ui_state = ui::UiState {
+                state: &state,
+                table_state: &mut table_state,
+                task_ids: &task_ids,
+                now: jiff::Timestamp::now(),
                 show_details,
-                &filter_text,
-                matches!(app_mode, AppMode::Filter),
+                filter_text: &filter_text,
+                input_mode: matches!(app_mode, AppMode::Filter),
                 log_view,
-            );
+            };
+
+            ui::draw(f, &mut ui_state);
         })?;
 
         // Calculate how much time is left until the next scheduled refresh (250ms).
@@ -158,42 +211,17 @@ async fn run_app<B: ratatui::backend::Backend>(
                              _ => {}
                          }
                     }
-                    AppMode::Log { logs, scroll_offset, autoscroll, .. } => {
+                    AppMode::Log(log_state) => {
                         let terminal_height = terminal.size()?.height;
                         let page_height = terminal_height.saturating_sub(2);
 
-                        match key.code {
-                            KeyCode::Esc => next_mode = Some(AppMode::Normal),
-                            KeyCode::Char('j') | KeyCode::Down => {
-                                *scroll_offset = scroll_offset.saturating_add(1);
-                                *autoscroll = false;
-                            }
-                            KeyCode::Char('k') | KeyCode::Up => {
-                                *scroll_offset = scroll_offset.saturating_sub(1);
-                                *autoscroll = false;
-                            }
-                            KeyCode::PageUp => {
-                                *scroll_offset = scroll_offset.saturating_sub(page_height);
-                                *autoscroll = false;
-                            }
-                            KeyCode::PageDown => {
-                                *scroll_offset = scroll_offset.saturating_add(page_height);
-                                *autoscroll = false;
-                            }
-                            KeyCode::Home => {
-                                *scroll_offset = 0;
-                                *autoscroll = false;
-                            }
-                            KeyCode::End => {
-                                *autoscroll = true;
-                            }
-                            _ => {}
+                        if key.code == KeyCode::Esc {
+                            next_mode = Some(AppMode::Normal);
+                        } else {
+                            log_state.handle_key(key.code, page_height);
                         }
 
-                        if *autoscroll {
-                            let lines = logs.lines().count() as u16;
-                            *scroll_offset = lines.saturating_sub(page_height);
-                        }
+                        log_state.update_autoscroll(page_height);
                     }
                     AppMode::Normal => {
                         if show_details {
@@ -213,12 +241,9 @@ async fn run_app<B: ratatui::backend::Backend>(
                                 KeyCode::Enter => {
                                     if let Some(i) = table_state.selected() {
                                         if let Some(id) = task_ids.get(i) {
-                                            next_mode = Some(AppMode::Log {
-                                                task_id: *id,
-                                                logs: String::new(),
-                                                scroll_offset: 0,
-                                                autoscroll: true,
-                                            });
+                                            next_mode = Some(AppMode::Log(LogState::new(*id)));
+                                            // Trigger immediate fetch in next iteration
+                                            last_tick = Instant::now() - tick_rate;
                                         }
                                     }
                                 }

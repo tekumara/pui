@@ -100,25 +100,30 @@ impl PueueClientOps for PueueClient {
             tasks: TaskSelection::TaskIds(vec![id]),
             send_logs: true,
             lines: None,
-        })).await.map_err(|e| anyhow!("{:?}", e))?;
+        })).await.map_err(|e| anyhow!("Failed to send log request: {:?}", e))?;
 
-        let response = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive log response: {:?}", e))?;
 
         if let Response::Log(mut logs) = response {
             if let Some(task_log) = logs.remove(&id) {
-                Ok(task_log.output.map(|b| {
-                    let mut decoder = FrameDecoder::new(&b[..]);
-                    let mut decompressed = Vec::new();
-                    match decoder.read_to_end(&mut decompressed) {
-                        Ok(_) => String::from_utf8_lossy(&decompressed).into_owned(),
-                        Err(_) => String::from_utf8_lossy(&b).into_owned(),
-                    }
-                }))
+                Ok(task_log.output.map(|bytes| self.decompress_log(bytes)))
             } else {
-                Err(anyhow!("Task log not found in response"))
+                Err(anyhow!("Task {} not found in log response", id))
             }
         } else {
             Err(anyhow!("Unexpected response from pueue daemon: {:?}", response))
+        }
+    }
+}
+
+impl PueueClient {
+    fn decompress_log(&self, bytes: Vec<u8>) -> String {
+        let mut decoder = FrameDecoder::new(&bytes[..]);
+        let mut decompressed = Vec::new();
+
+        match decoder.read_to_end(&mut decompressed) {
+            Ok(_) => String::from_utf8_lossy(&decompressed).into_owned(),
+            Err(_) => String::from_utf8_lossy(&bytes).into_owned(),
         }
     }
 }
