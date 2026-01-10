@@ -215,7 +215,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                         let terminal_height = terminal.size()?.height;
                         let page_height = terminal_height.saturating_sub(2);
 
-                        if key.code == KeyCode::Esc {
+                        if key.code == KeyCode::Char('q') {
                             next_mode = Some(AppMode::Normal);
                         } else {
                             log_state.handle_key(key.code, page_height);
