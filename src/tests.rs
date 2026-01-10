@@ -171,6 +171,62 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
+    let mut client = MockPueueClient::new();
+    let mut state = client.get_state().await?;
+
+    // Add many tasks to trigger scrollbar
+    // Terminal height is 24, table area is ~16, visible rows ~13
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+    for i in 3..20 {
+        let task = Task {
+            id: i,
+            created_at: now,
+            original_command: format!("sleep {}", i),
+            command: format!("sleep {}", i),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Queued {
+                enqueued_at: now,
+            },
+        };
+        state.tasks.insert(i, task);
+    }
+
+    let mut task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
+    task_ids.sort();
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+    let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
+
+    let mut table_state = TableState::default();
+
+    // Select the last task to move scrollbar to the bottom
+    table_state.select(Some(task_ids.len().saturating_sub(1)));
+
+    terminal.draw(|f| {
+        ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false, "", false);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_ui_snapshot_filter_active() -> Result<()> {
     let (state, _, mut terminal, jiff_now) = setup_test_ui().await?;
     let mut table_state = TableState::default();

@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState},
     Frame,
 };
 use std::path::Path;
@@ -172,6 +172,23 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         .highlight_symbol(">> ");
 
         f.render_stateful_widget(task_table, table_area, table_state);
+
+        // Calculate visible rows: height - 2 (top/bottom borders) - 1 (header)
+        let visible_rows = table_area.height.saturating_sub(3) as usize;
+        if task_ids.len() > visible_rows {
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("↑"))
+                .end_symbol(Some("↓"));
+            let mut scrollbar_state = ScrollbarState::new(task_ids.len())
+                .viewport_content_length(visible_rows)
+                .position(table_state.selected().unwrap_or(0));
+
+            f.render_stateful_widget(
+                scrollbar,
+                table_area,
+                &mut scrollbar_state,
+            );
+        }
 
         // Task Details Popup
         if show_details {
