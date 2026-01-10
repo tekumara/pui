@@ -85,8 +85,7 @@ impl PueueClientOps for MockPueueClient {
     }
 }
 
-#[tokio::test]
-async fn test_ui_snapshot() -> Result<()> {
+async fn setup_test_ui() -> Result<(State, Vec<usize>, Terminal<TestBackend>, jiff::Timestamp)> {
     // Set TZ to UTC for consistent snapshots across environments
     unsafe {
         std::env::set_var("TZ", "UTC");
@@ -97,12 +96,19 @@ async fn test_ui_snapshot() -> Result<()> {
     let task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
 
     let backend = TestBackend::new(80, 24);
-    let mut terminal = Terminal::new(backend)?;
-    let mut table_state = TableState::default();
-    table_state.select(Some(0));
+    let terminal = Terminal::new(backend)?;
 
     let now = Local.timestamp_opt(1767225600, 0).unwrap();
     let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
+
+    Ok((state, task_ids, terminal, jiff_now))
+}
+
+#[tokio::test]
+async fn test_ui_snapshot() -> Result<()> {
+    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
 
     terminal.draw(|f| {
         ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, false);
@@ -123,22 +129,9 @@ async fn test_ui_snapshot() -> Result<()> {
 
 #[tokio::test]
 async fn test_ui_snapshot_with_details() -> Result<()> {
-    // Set TZ to UTC for consistent snapshots across environments
-    unsafe {
-        std::env::set_var("TZ", "UTC");
-    }
-
-    let mut client = MockPueueClient::new();
-    let state = client.get_state().await?;
-    let task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
-
-    let backend = TestBackend::new(80, 24);
-    let mut terminal = Terminal::new(backend)?;
+    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
     let mut table_state = TableState::default();
     table_state.select(Some(0));
-
-    let now = Local.timestamp_opt(1767225600, 0).unwrap();
-    let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
 
     terminal.draw(|f| {
         ui::draw(f, &Some(state), &mut table_state, &task_ids, jiff_now, true);
