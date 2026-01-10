@@ -86,17 +86,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                 let now = jiff::Timestamp::now();
                 let mut ids: Vec<usize> = s.tasks.iter()
                     .filter(|(id, task)| {
-                        if filter_text.is_empty() {
-                            true
-                        } else {
-                            let ft = ui::format_task(**id, task, &now);
-                            let text = filter_text.to_lowercase();
-
-                            ft.status.to_lowercase().contains(&text) ||
-                            ft.command.to_lowercase().contains(&text) ||
-                            ft.path.to_lowercase().contains(&text) ||
-                            ft.id.to_lowercase().contains(&text)
-                        }
+                        ui::format_task(**id, task, &now).matches_filter(&filter_text)
                     })
                     .map(|(id, _)| *id)
                     .collect();
@@ -167,31 +157,21 @@ async fn run_app<B: ratatui::backend::Backend>(
                                 }
                                 KeyCode::Char('j') | KeyCode::Down => {
                                     let i = match table_state.selected() {
-                                        Some(i) => {
-                                            if task_ids.is_empty() {
-                                                0
-                                            } else if i >= task_ids.len().saturating_sub(1) {
-                                                0
-                                            } else {
-                                                i + 1
-                                            }
-                                        }
-                                        None => 0,
+                                        Some(i) if !task_ids.is_empty() => (i + 1) % task_ids.len(),
+                                        _ => 0,
                                     };
                                     table_state.select(Some(i));
                                 }
                                 KeyCode::Char('k') | KeyCode::Up => {
                                     let i = match table_state.selected() {
-                                        Some(i) => {
-                                            if task_ids.is_empty() {
-                                                0
-                                            } else if i == 0 {
+                                        Some(i) if !task_ids.is_empty() => {
+                                            if i == 0 {
                                                 task_ids.len().saturating_sub(1)
                                             } else {
                                                 i - 1
                                             }
                                         }
-                                        None => 0,
+                                        _ => 0,
                                     };
                                     table_state.select(Some(i));
                                 }

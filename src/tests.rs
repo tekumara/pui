@@ -179,13 +179,7 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
     // Filter tasks by "1"
     let task_ids: Vec<usize> = state.tasks.iter()
         .filter(|(id, task)| {
-            let ft = ui::format_task(**id, task, &jiff_now);
-            let text = "1".to_lowercase();
-
-            ft.status.to_lowercase().contains(&text) ||
-            ft.command.to_lowercase().contains(&text) ||
-            ft.path.to_lowercase().contains(&text) ||
-            ft.id.to_lowercase().contains(&text)
+            ui::format_task(**id, task, &jiff_now).matches_filter("1")
         })
         .map(|(id, _)| *id)
         .collect();
