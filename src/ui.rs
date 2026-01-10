@@ -6,22 +6,29 @@ use ratatui::{
 };
 use std::path::Path;
 use pueue_lib::state::State;
-use pueue_lib::task::{Task, TaskStatus};
+use pueue_lib::task::{Task, TaskResult, TaskStatus};
 
-fn status_name(status: &TaskStatus) -> &str {
+fn status_display(status: &TaskStatus) -> String {
     match status {
-        TaskStatus::Locked { .. } => "Locked",
-        TaskStatus::Stashed { .. } => "Stashed",
-        TaskStatus::Queued { .. } => "Queued",
-        TaskStatus::Running { .. } => "Running",
-        TaskStatus::Paused { .. } => "Paused",
-        TaskStatus::Done { .. } => "Done",
+        TaskStatus::Locked { .. } => "Locked".to_string(),
+        TaskStatus::Stashed { .. } => "Stashed".to_string(),
+        TaskStatus::Queued { .. } => "Queued".to_string(),
+        TaskStatus::Running { .. } => "Running".to_string(),
+        TaskStatus::Paused { .. } => "Paused".to_string(),
+        TaskStatus::Done { result, .. } => match result {
+            TaskResult::Success => "Success".to_string(),
+            TaskResult::Failed(code) => format!("Failed ({})", code),
+            TaskResult::Killed => "Killed".to_string(),
+            TaskResult::Errored => "Errored".to_string(),
+            TaskResult::DependencyFailed => "Dependency Failed".to_string(),
+            _ => "Done".to_string(),
+        },
     }
 }
 
 struct FormattedTask<'a> {
     id: String,
-    status: &'a str,
+    status: String,
     command: String,
     path: String,
     duration: String,
@@ -57,7 +64,7 @@ fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Formatte
 
     FormattedTask {
         id: id.to_string(),
-        status: status_name(&task.status),
+        status: status_display(&task.status),
         command: command_basename,
         path: tico::tico(&task.path.to_string_lossy()),
         duration: duration_str,
@@ -113,12 +120,16 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     if let Some(s) = &state {
         let rows: Vec<Row> = s.tasks.iter().map(|(&id, task)| {
             let ft = format_task(id, task, &now);
-            let style = match ft.status {
-                "Running" => Style::default().fg(Color::Green),
-                "Queued" => Style::default().fg(Color::Yellow),
-                "Paused" => Style::default().fg(Color::Blue),
-                "Done" => Style::default().fg(Color::DarkGray),
-                _ => Style::default(),
+            let style = if ft.status == "Running" || ft.status == "Success" {
+                Style::default().fg(Color::Green)
+            } else if ft.status.starts_with("Failed") || ft.status == "Errored" || ft.status == "Killed" {
+                Style::default().fg(Color::Red)
+            } else if ft.status == "Queued" {
+                Style::default().fg(Color::Yellow)
+            } else if ft.status == "Paused" {
+                Style::default().fg(Color::Blue)
+            } else {
+                Style::default().fg(Color::DarkGray)
             };
 
             Row::new(vec![
@@ -135,7 +146,7 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
 
         let task_table = Table::new(rows, [
             Constraint::Length(4),
-            Constraint::Length(10),
+            Constraint::Length(12),
             Constraint::Percentage(30),
             Constraint::Percentage(30),
             Constraint::Length(10),

@@ -1,6 +1,5 @@
 ---
 source: src/tests.rs
-assertion_line: 155
 expression: buffer_string
 ---
                                                                                 
@@ -8,10 +7,10 @@ expression: buffer_string
  │j/k: Nav | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │   Id   Status┌ Details (Esc to close) ──────────────────────┐   Duration   │ 
- │>> 0    Runnin│ID: 0                                         │   0s         │ 
- │   1    Done  │Status: Running                               │   0s         │ 
- │              │Command: sleep 60                             │              │ 
+ │   Id   Status┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
+ │>> 0    Runnin│ID: 0                                         │    0s        │ 
+ │   1    Succes│Status: Running                               │    0s        │ 
+ │   2    Failed│Command: sleep 60                             │    0s        │ 
  │              │Path: /tmp                                    │              │ 
  │              │Duration: 0s                                  │              │ 
  │              │Group: default                                │              │ 
