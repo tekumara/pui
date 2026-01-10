@@ -56,8 +56,28 @@ impl MockPueueClient {
             },
         };
 
+        let task3 = Task {
+            id: 2,
+            created_at: now,
+            original_command: "false".to_string(),
+            command: "false".to_string(),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Done {
+                enqueued_at: now,
+                start: now,
+                end: now,
+                result: TaskResult::Failed(1),
+            },
+        };
+
         state.tasks.insert(0, task1);
         state.tasks.insert(1, task2);
+        state.tasks.insert(2, task3);
 
         Self { state }
     }
