@@ -157,7 +157,13 @@ async fn run_app<B: ratatui::backend::Backend>(
                                 }
                                 KeyCode::Char('j') | KeyCode::Down => {
                                     let i = match table_state.selected() {
-                                        Some(i) if !task_ids.is_empty() => (i + 1) % task_ids.len(),
+                                        Some(i) if !task_ids.is_empty() => {
+                                            if i >= task_ids.len().saturating_sub(1) {
+                                                i
+                                            } else {
+                                                i + 1
+                                            }
+                                        }
                                         _ => 0,
                                     };
                                     table_state.select(Some(i));
@@ -166,7 +172,7 @@ async fn run_app<B: ratatui::backend::Backend>(
                                     let i = match table_state.selected() {
                                         Some(i) if !task_ids.is_empty() => {
                                             if i == 0 {
-                                                task_ids.len().saturating_sub(1)
+                                                0
                                             } else {
                                                 i - 1
                                             }
