@@ -109,15 +109,23 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1]
 }
 
-pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, task_ids: &[usize], now: jiff::Timestamp, show_details: bool, filter_text: &str, input_mode: bool, log_view: Option<(&str, u16)>) {
-    if let Some((logs, scroll_offset)) = log_view {
+pub struct UiState<'a> {
+    pub state: &'a Option<State>,
+    pub table_state: &'a mut TableState,
+    pub task_ids: &'a [usize],
+    pub now: jiff::Timestamp,
+    pub show_details: bool,
+    pub filter_text: &'a str,
+    pub input_mode: bool,
+    pub log_view: Option<(&'a str, u16)>,
+}
+
+pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
+    if let Some((logs, scroll_offset)) = ui_state.log_view {
         let size = f.area();
         let block = Block::default()
             .borders(Borders::ALL)
             .title(" Task Log (Esc to close) ");
-
-        // Calculate scroll based on scroll_offset
-        // Since Paragraph scrolling uses u16 for line offset
 
         let p = Paragraph::new(logs)
             .block(block)
@@ -147,11 +155,11 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
     // Use full width for the table (chunks[1])
     let table_area = chunks[1];
 
-    if let Some(s) = &state {
-        let rows: Vec<Row> = task_ids.iter().filter_map(|id| {
+    if let Some(s) = &ui_state.state {
+        let rows: Vec<Row> = ui_state.task_ids.iter().filter_map(|id| {
             s.tasks.get(id).map(|task| (*id, task))
         }).map(|(id, task)| {
-            let ft = format_task(id, task, &now);
+            let ft = format_task(id, task, &ui_state.now);
             let style = if ft.status == "Running" || ft.status == "Success" {
                 Style::default().fg(Color::Green)
             } else if ft.status.starts_with("Failed") || ft.status == "Errored" || ft.status == "Killed" {
@@ -188,17 +196,17 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         .row_highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Rgb(50, 50, 50)))
         .highlight_symbol(">> ");
 
-        f.render_stateful_widget(task_table, table_area, table_state);
+        f.render_stateful_widget(task_table, table_area, ui_state.table_state);
 
         // Calculate visible rows: height - 2 (top/bottom borders) - 1 (header)
         let visible_rows = table_area.height.saturating_sub(3) as usize;
-        if task_ids.len() > visible_rows {
+        if ui_state.task_ids.len() > visible_rows {
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(Some("↑"))
                 .end_symbol(Some("↓"));
-            let mut scrollbar_state = ScrollbarState::new(task_ids.len())
+            let mut scrollbar_state = ScrollbarState::new(ui_state.task_ids.len())
                 .viewport_content_length(visible_rows)
-                .position(table_state.selected().unwrap_or(0));
+                .position(ui_state.table_state.selected().unwrap_or(0));
 
             f.render_stateful_widget(
                 scrollbar,
@@ -208,13 +216,13 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         }
 
         // Task Details Popup
-        if show_details {
-            let selected_id = table_state.selected()
-                .and_then(|i| task_ids.get(i));
+        if ui_state.show_details {
+            let selected_id = ui_state.table_state.selected()
+                .and_then(|i| ui_state.task_ids.get(i));
 
             let details_text = if let Some(id) = selected_id {
                 if let Some(task) = s.tasks.get(id) {
-                    let ft = format_task(*id, task, &now);
+                    let ft = format_task(*id, task, &ui_state.now);
 
                     let mut details = format!(
                         "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
@@ -246,10 +254,10 @@ pub fn draw(f: &mut Frame, state: &Option<State>, table_state: &mut TableState, 
         f.render_widget(loading, table_area);
     }
 
-    let footer_text = if input_mode {
-        format!("Filter: {}_ (Esc to clear)", filter_text)
-    } else if !filter_text.is_empty() {
-        format!("Filter: {} (Esc to clear)", filter_text)
+    let footer_text = if ui_state.input_mode {
+        format!("Filter: {}_ (Esc to clear)", ui_state.filter_text)
+    } else if !ui_state.filter_text.is_empty() {
+        format!("Filter: {} (Esc to clear)", ui_state.filter_text)
     } else {
         "Connected to Pueue daemon".to_string()
     };
