@@ -1,11 +1,13 @@
 use anyhow::Result;
 use chrono::{Local, TimeZone};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use ratatui::{backend::TestBackend, widgets::TableState, Terminal};
+use ratatui::{Terminal, backend::TestBackend, widgets::TableState};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use crate::LogState;
 use crate::pueue_client::PueueClientOps;
 use crate::ui;
 
@@ -170,7 +172,9 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
     // Add a long command and path to demonstrate wrapping
     if let Some(task) = state.tasks.get_mut(&0) {
         task.command = "long_command --option1 value1 --option2 value2 --option3 value3 --option4 value4 --option5 value5 --option6 value6".to_string();
-        task.path = PathBuf::from("/very/long/path/to/a/directory/that/should/definitely/wrap/at/some/point/in/the/ui/view");
+        task.path = PathBuf::from(
+            "/very/long/path/to/a/directory/that/should/definitely/wrap/at/some/point/in/the/ui/view",
+        );
     }
 
     terminal.draw(|f| {
@@ -220,9 +224,7 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             dependencies: vec![],
             priority: 0,
             label: None,
-            status: TaskStatus::Queued {
-                enqueued_at: now,
-            },
+            status: TaskStatus::Queued { enqueued_at: now },
         };
         state.tasks.insert(i, task);
     }
@@ -273,10 +275,10 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
     table_state.select(Some(0));
 
     // Filter tasks by "1"
-    let task_ids: Vec<usize> = state.tasks.iter()
-        .filter(|(id, task)| {
-            ui::format_task(**id, task, &jiff_now).matches_filter("1")
-        })
+    let task_ids: Vec<usize> = state
+        .tasks
+        .iter()
+        .filter(|(id, task)| ui::format_task(**id, task, &jiff_now).matches_filter("1"))
         .map(|(id, _)| *id)
         .collect();
 
@@ -333,10 +335,7 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             input_mode: false,
             log_view: Some((logs, scroll_offset)),
         };
-        ui::draw(
-            f,
-            &mut ui_state
-        );
+        ui::draw(f, &mut ui_state);
     })?;
 
     let buffer = terminal.backend().buffer();
@@ -346,6 +345,81 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
         .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
+    // This test is designed to fail if using textwrap of naive line count
+    // instead of Ratatui's Paragraph wrapper
+
+    // Width 42 -> content wrap width is 40 (after borders).
+    let backend = TestBackend::new(42, 4);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    let mut log_state = LogState::new(0);
+    log_state.logs = [
+        // A long line that will be wrapped. At width>=6, Ratatui and textwrap disagree on
+        // wrapped row count, so a textwrap-based "End" scroll doesn't reach the end of the logs.
+        "PATH  /very/long/path/preceded/with/spaces/to/align/columns",
+        // Final marker line we must be able to reach with End/G
+        // Keep the marker <= page_width so it doesn't wrap (makes the assertion simple).
+        "ZZ",
+    ]
+    .join("\n");
+
+    // Simulate 'G' / End key press.
+    // Borders take 2 lines => 2 lines of content visible and 40 columns of content width for wrapping.
+    let page_height = 4 - 2;
+    let page_width = 42 - 2;
+    log_state.handle_key(
+        KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+        page_height,
+        page_width,
+    );
+    log_state.update_autoscroll(page_height, page_width);
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &None,
+            table_state: &mut table_state,
+            task_ids: &[],
+            now: jiff::Timestamp::now(),
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: Some((&log_state.logs, log_state.scroll_offset)),
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let buffer_lines: Vec<&str> = buffer_string.lines().collect();
+    let last_content_line = buffer_lines
+        .iter()
+        .rev()
+        // Only consider actual paragraph lines (not the top/bottom border).
+        .find(|line| line.starts_with('│') && line.ends_with('│'))
+        .unwrap_or(&"");
+    assert!(
+        // Second to last line is the wrapped tail of the long path
+        last_content_line.contains("ZZ"),
+        "Expected last visible content line to contain the end marker, but got: {:?}",
+        last_content_line
+    );
 
     insta::assert_snapshot!(buffer_string);
 

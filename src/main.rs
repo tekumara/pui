@@ -63,7 +63,7 @@ pub struct LogState {
 }
 
 impl LogState {
-    fn new(task_id: usize) -> Self {
+    pub fn new(task_id: usize) -> Self {
         Self {
             task_id,
             logs: String::new(),
@@ -72,7 +72,7 @@ impl LogState {
         }
     }
 
-    fn handle_key(&mut self, key: KeyEvent, page_height: u16) -> bool {
+    pub fn handle_key(&mut self, key: KeyEvent, page_height: u16, page_width: u16) -> bool {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.scroll_offset = self.scroll_offset.saturating_add(1);
@@ -96,7 +96,7 @@ impl LogState {
             }
             KeyCode::End | KeyCode::Char('G') => {
                 self.autoscroll = true;
-                self.update_autoscroll(page_height);
+                self.update_autoscroll(page_height, page_width);
             }
             KeyCode::Char('d') => {
                 self.scroll_offset = self.scroll_offset.saturating_add(page_height / 2);
@@ -111,9 +111,20 @@ impl LogState {
         true
     }
 
-    fn update_autoscroll(&mut self, page_height: u16) {
+    fn visual_line_count(&self, page_width: u16) -> u16 {
+        // Use ratatui's own wrapping algorithm (Paragraph::line_count) so our autoscroll matches
+        // exactly what gets rendered.
+        use ratatui::widgets::{Paragraph, Wrap};
+
+        let width = page_width.max(1);
+        let logs = self.logs.replace('\t', "        ");
+        let p = Paragraph::new(logs).wrap(Wrap { trim: false });
+        p.line_count(width) as u16
+    }
+
+    pub fn update_autoscroll(&mut self, page_height: u16, page_width: u16) {
         if self.autoscroll {
-            let lines = self.logs.lines().count() as u16;
+            let lines = self.visual_line_count(page_width);
             self.scroll_offset = lines.saturating_sub(page_height);
         }
     }
@@ -223,16 +234,17 @@ where
                          }
                     }
                     AppMode::Log(log_state) => {
-                        let terminal_height = terminal.size()?.height;
-                        let page_height = terminal_height.saturating_sub(2);
+                        let terminal_size = terminal.size()?;
+                        let page_height = terminal_size.height.saturating_sub(2);
+                        let page_width = terminal_size.width.saturating_sub(2);
 
                         if key.code == KeyCode::Char('q') {
                             next_mode = Some(AppMode::Normal);
                         } else {
-                            log_state.handle_key(key, page_height);
+                            log_state.handle_key(key, page_height, page_width);
                         }
 
-                        log_state.update_autoscroll(page_height);
+                        log_state.update_autoscroll(page_height, page_width);
                     }
                     AppMode::Normal => {
                         if show_details {
