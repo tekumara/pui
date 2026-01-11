@@ -425,3 +425,76 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
+    // Ensure "scroll to end" (G/End) followed by a further down-step doesn't move beyond the end.
+
+    // Width 42 -> content wrap width is 40 (after borders).
+    let backend = TestBackend::new(42, 4);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    let mut log_state = LogState::new(0);
+    log_state.logs = [
+        "AA",
+        "ZZ",
+    ]
+    .join("\n");
+
+    // Borders take 2 lines => 2 lines of content visible and 40 columns of content width for wrapping.
+    let page_height = 4 - 2;
+    let page_width = 42 - 2;
+
+    // 'G' / End
+    log_state.handle_key(
+        KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT),
+        page_height,
+        page_width,
+    );
+    log_state.update_autoscroll(page_height, page_width);
+
+    // One line beyond end
+    log_state.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), page_height, page_width);
+    log_state.update_autoscroll(page_height, page_width);
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &None,
+            table_state: &mut table_state,
+            task_ids: &[],
+            now: jiff::Timestamp::now(),
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: Some((&log_state.logs, log_state.scroll_offset)),
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Verify clamping: "ZZ" should remain on the last visible content line.
+    let buffer_lines: Vec<&str> = buffer_string.lines().collect();
+    let content_lines: Vec<&&str> = buffer_lines
+        .iter()
+        .filter(|line| line.starts_with('│') && line.ends_with('│'))
+        .collect();
+    assert!(
+        content_lines[1].contains("ZZ"),
+        "Expected last visible content line to contain the end marker, but got: {:?}",
+        content_lines[1]
+    );
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}

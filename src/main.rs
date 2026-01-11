@@ -108,6 +108,12 @@ impl LogState {
             }
             _ => return false,
         }
+
+        // Clamp manual scrolling to the last possible offset, so we can't overscroll into blank space.
+        if !self.autoscroll {
+            let max_offset = self.visual_line_count(page_width).saturating_sub(page_height);
+            self.scroll_offset = self.scroll_offset.min(max_offset);
+        }
         true
     }
 
