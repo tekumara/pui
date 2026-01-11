@@ -19,6 +19,7 @@ pub trait PueueClientOps {
     async fn get_task_log(&mut self, id: usize) -> Result<Option<String>>;
 }
 
+#[derive(Debug)]
 pub struct PueueClient {
     client: Client,
 }

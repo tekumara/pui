@@ -4,17 +4,12 @@ mod ui;
 mod tests;
 
 use anyhow::Result;
-use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
+use futures::{FutureExt, StreamExt};
 use ratatui::{
-    backend::CrosstermBackend,
     widgets::TableState,
-    Terminal,
+    DefaultTerminal, Frame,
 };
-use std::io;
 use std::time::{Duration, Instant};
 
 use crate::pueue_client::{PueueClient, PueueClientOps};
@@ -22,39 +17,362 @@ use pueue_lib::state::State;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    let mut pueue_client = match PueueClient::new().await {
-        Ok(client) => Some(client),
+    let terminal = ratatui::init();
+    let pueue_client = match PueueClient::new().await {
+        Ok(client) => client,
         Err(e) => {
-            // Restore terminal before printing error
-            disable_raw_mode()?;
-            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-            terminal.show_cursor()?;
+            ratatui::restore();
             eprintln!("Failed to connect to Pueue daemon: {}", e);
             return Ok(());
         }
     };
+    let result = App::new(pueue_client).run(terminal).await;
+    ratatui::restore();
+    result
+}
 
-    let res = run_app(&mut terminal, pueue_client.as_mut().unwrap()).await;
+#[derive(Debug)]
+enum AppMode {
+    Normal,
+    Filter,
+    Log(LogState),
+}
 
-    // Restore terminal
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
+#[derive(Debug)]
+pub struct App {
+    /// Is the application running?
+    running: bool,
+    /// Event stream
+    event_stream: EventStream,
+    /// Pueue client
+    pueue_client: PueueClient,
+    /// Last tick time
+    last_tick: Instant,
+    /// Tick rate
+    tick_rate: Duration,
+    /// Pueue state
+    state: Option<State>,
+    /// Table state
+    table_state: TableState,
+    /// Show details popup
+    show_details: bool,
+    /// Application mode
+    app_mode: AppMode,
+    /// Filter text
+    filter_text: String,
+}
 
-    if let Err(err) = res {
-        println!("{:?}", err);
+impl App {
+    /// Construct a new instance of [`App`].
+    pub fn new(pueue_client: PueueClient) -> Self {
+        let mut table_state = TableState::default();
+        table_state.select(Some(0));
+
+        Self {
+            running: false,
+            event_stream: EventStream::new(),
+            pueue_client,
+            last_tick: Instant::now(),
+            tick_rate: Duration::from_millis(250),
+            state: None,
+            table_state,
+            show_details: false,
+            app_mode: AppMode::Normal,
+            filter_text: String::new(),
+        }
+    }
+
+    /// Run the application's main loop.
+    pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
+        self.running = true;
+        while self.running {
+            // Fetch state if needed
+            let should_fetch = self.state.is_none() || self.last_tick.elapsed() >= self.tick_rate;
+            if should_fetch {
+                if let Ok(new_state) = self.pueue_client.get_state().await {
+                    self.state = Some(new_state);
+                }
+
+                // Fetch logs if in Log mode
+                if let AppMode::Log(log_state) = &mut self.app_mode {
+                    if let Ok(Some(new_logs)) = self.pueue_client.get_task_log(log_state.task_id).await {
+                        log_state.logs = new_logs;
+                    }
+                }
+
+                self.last_tick = Instant::now();
+            }
+
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_crossterm_events().await?;
+        }
+        Ok(())
+    }
+
+    /// Renders the user interface.
+    fn draw(&mut self, frame: &mut Frame) {
+        let task_ids: Vec<usize> = self.state.as_ref()
+            .map(|s| {
+                let now = jiff::Timestamp::now();
+                let mut ids: Vec<usize> = s.tasks.iter()
+                    .filter(|(id, task)| {
+                        ui::format_task(**id, task, &now).matches_filter(&self.filter_text)
+                    })
+                    .map(|(id, _)| *id)
+                    .collect();
+                ids.sort();
+                ids
+            })
+            .unwrap_or_default();
+
+        let log_view = if let AppMode::Log(log_state) = &self.app_mode {
+            Some((log_state.logs.as_str(), log_state.scroll_offset))
+        } else {
+            None
+        };
+
+        let mut ui_state = ui::UiState {
+            state: &self.state,
+            table_state: &mut self.table_state,
+            task_ids: &task_ids,
+            now: jiff::Timestamp::now(),
+            show_details: self.show_details,
+            filter_text: &self.filter_text,
+            input_mode: matches!(self.app_mode, AppMode::Filter),
+            log_view,
+        };
+
+        ui::draw(frame, &mut ui_state);
+    }
+
+    /// Reads the crossterm events and updates the state of [`App`].
+    async fn handle_crossterm_events(&mut self) -> Result<()> {
+        // Calculate timeout
+        let timeout = self.tick_rate
+            .checked_sub(self.last_tick.elapsed())
+            .unwrap_or(Duration::from_secs(0));
+
+        let event = tokio::time::timeout(timeout, self.event_stream.next().fuse()).await;
+
+        match event {
+            Ok(Some(Ok(evt))) => match evt {
+                Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key).await?,
+                Event::Mouse(_) => {}
+                Event::Resize(_, _) => {}
+                _ => {}
+            },
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Handles the key events and updates the state of [`App`].
+    async fn on_key_event(&mut self, key: KeyEvent) -> Result<()> {
+        let mut next_mode = None;
+
+        match &mut self.app_mode {
+            AppMode::Filter => {
+                match key.code {
+                    KeyCode::Esc => {
+                        next_mode = Some(AppMode::Normal);
+                        self.filter_text.clear();
+                    }
+                    KeyCode::Enter => {
+                        next_mode = Some(AppMode::Normal);
+                    }
+                    KeyCode::Backspace => {
+                        self.filter_text.pop();
+                    }
+                    KeyCode::Char(c) => {
+                        self.filter_text.push(c);
+                    }
+                    _ => {}
+                }
+            }
+            AppMode::Log(log_state) => {
+                let terminal_size = crossterm::terminal::size()?;
+                let page_height = terminal_size.1.saturating_sub(2);
+                let page_width = terminal_size.0.saturating_sub(2);
+
+                if key.code == KeyCode::Char('q') {
+                    next_mode = Some(AppMode::Normal);
+                } else {
+                    log_state.handle_key(key, page_height, page_width);
+                }
+
+                log_state.update_autoscroll(page_height, page_width);
+            }
+            AppMode::Normal => {
+                if self.show_details {
+                    match key.code {
+                        KeyCode::Esc => self.show_details = false,
+                        KeyCode::Char('q') => self.quit(),
+                        _ => {}
+                    }
+                } else {
+                    match key.code {
+                        KeyCode::Char('q') => self.quit(),
+                        KeyCode::Esc => {
+                            if !self.filter_text.is_empty() {
+                                self.filter_text.clear();
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Some(i) = self.table_state.selected() {
+                                let task_ids = self.get_filtered_task_ids();
+                                if let Some(id) = task_ids.get(i) {
+                                    next_mode = Some(AppMode::Log(LogState::new(*id)));
+                                    // Trigger immediate fetch in next iteration
+                                    self.last_tick = Instant::now() - self.tick_rate;
+                                }
+                            }
+                        }
+                        KeyCode::Char('d') => {
+                            if self.table_state.selected().is_some() {
+                                self.show_details = true;
+                            }
+                        }
+                        KeyCode::Char('j') | KeyCode::Down => {
+                            let task_ids = self.get_filtered_task_ids();
+                            let i = match self.table_state.selected() {
+                                Some(i) if !task_ids.is_empty() => {
+                                    if i >= task_ids.len().saturating_sub(1) {
+                                        i
+                                    } else {
+                                        i + 1
+                                    }
+                                }
+                                _ => 0,
+                            };
+                            self.table_state.select(Some(i));
+                        }
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            let task_ids = self.get_filtered_task_ids();
+                            let i = match self.table_state.selected() {
+                                Some(i) if !task_ids.is_empty() => {
+                                    if i == 0 {
+                                        0
+                                    } else {
+                                        i - 1
+                                    }
+                                }
+                                _ => 0,
+                            };
+                            self.table_state.select(Some(i));
+                        }
+                        KeyCode::PageUp => {
+                            let task_ids = self.get_filtered_task_ids();
+                            if !task_ids.is_empty() {
+                                let offset = self.table_state.offset();
+                                let selected = self.table_state.selected().unwrap_or(0);
+                                if selected > offset {
+                                    self.table_state.select(Some(offset));
+                                } else {
+                                    let terminal_size = crossterm::terminal::size()?;
+                                    let visible_rows = terminal_size.1.saturating_sub(11) as usize;
+                                    self.table_state.select(Some(selected.saturating_sub(visible_rows)));
+                                }
+                            }
+                        }
+                        KeyCode::PageDown => {
+                            let task_ids = self.get_filtered_task_ids();
+                            if !task_ids.is_empty() {
+                                let terminal_size = crossterm::terminal::size()?;
+                                let visible_rows = terminal_size.1.saturating_sub(11) as usize;
+                                let offset = self.table_state.offset();
+                                let bottom = (offset + visible_rows).saturating_sub(1).min(task_ids.len().saturating_sub(1));
+                                let selected = self.table_state.selected().unwrap_or(0);
+                                if selected < bottom {
+                                    self.table_state.select(Some(bottom));
+                                } else {
+                                    self.table_state.select(Some((selected + visible_rows).min(task_ids.len().saturating_sub(1))));
+                                }
+                            }
+                        }
+                        KeyCode::Home => {
+                            let task_ids = self.get_filtered_task_ids();
+                            if !task_ids.is_empty() {
+                                self.table_state.select(Some(0));
+                            }
+                        }
+                        KeyCode::End => {
+                            let task_ids = self.get_filtered_task_ids();
+                            if !task_ids.is_empty() {
+                                self.table_state.select(Some(task_ids.len().saturating_sub(1)));
+                            }
+                        }
+                        KeyCode::Char('f') => {
+                            self.app_mode = AppMode::Filter;
+                        }
+                        KeyCode::Char('s') => {
+                            if let Some(i) = self.table_state.selected() {
+                                let task_ids = self.get_filtered_task_ids();
+                                if let Some(id) = task_ids.get(i) {
+                                    self.pueue_client.start_tasks(vec![*id]).await?;
+                                }
+                            }
+                        }
+                        KeyCode::Char('p') => {
+                            if let Some(i) = self.table_state.selected() {
+                                let task_ids = self.get_filtered_task_ids();
+                                if let Some(id) = task_ids.get(i) {
+                                    self.pueue_client.pause_tasks(vec![*id]).await?;
+                                }
+                            }
+                        }
+                        KeyCode::Char('x') => {
+                            if let Some(i) = self.table_state.selected() {
+                                let task_ids = self.get_filtered_task_ids();
+                                if let Some(id) = task_ids.get(i) {
+                                    self.pueue_client.kill_tasks(vec![*id]).await?;
+                                }
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if let Some(i) = self.table_state.selected() {
+                                let task_ids = self.get_filtered_task_ids();
+                                if let Some(id) = task_ids.get(i) {
+                                    self.pueue_client.remove_tasks(vec![*id]).await?;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        if let Some(mode) = next_mode {
+            self.app_mode = mode;
     }
 
     Ok(())
 }
 
+    /// Get filtered task IDs
+    fn get_filtered_task_ids(&self) -> Vec<usize> {
+        self.state.as_ref()
+            .map(|s| {
+                let now = jiff::Timestamp::now();
+                let mut ids: Vec<usize> = s.tasks.iter()
+                    .filter(|(id, task)| {
+                        ui::format_task(**id, task, &now).matches_filter(&self.filter_text)
+                    })
+                    .map(|(id, _)| *id)
+                    .collect();
+                ids.sort();
+                ids
+            })
+            .unwrap_or_default()
+    }
+
+    /// Set running to false to quit the application.
+    fn quit(&mut self) {
+        self.running = false;
+    }
+}
+
+#[derive(Debug)]
 pub struct LogState {
     pub task_id: usize,
     pub logs: String,
@@ -136,255 +454,3 @@ impl LogState {
     }
 }
 
-enum AppMode {
-    Normal,
-    Filter,
-    Log(LogState),
-}
-
-async fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    pueue_client: &mut impl PueueClientOps,
-) -> Result<()>
-where
-    B::Error: std::error::Error + Send + Sync + 'static,
-{
-    let mut last_tick = Instant::now();
-    let tick_rate = Duration::from_millis(250);
-    let mut state: Option<State> = None;
-    let mut table_state = TableState::default();
-    table_state.select(Some(0));
-    let mut show_details = false;
-    let mut app_mode = AppMode::Normal;
-    let mut filter_text = String::new();
-
-    loop {
-        let should_fetch = state.is_none() || last_tick.elapsed() >= tick_rate;
-        if should_fetch {
-            if let Ok(new_state) = pueue_client.get_state().await {
-                state = Some(new_state);
-            }
-
-            // Fetch logs if in Log mode
-            if let AppMode::Log(log_state) = &mut app_mode {
-                if let Ok(Some(new_logs)) = pueue_client.get_task_log(log_state.task_id).await {
-                    log_state.logs = new_logs;
-                    // We'll update autoscroll later in the loop after we have the terminal size
-                }
-            }
-
-            last_tick = Instant::now();
-        }
-
-        let task_ids: Vec<usize> = state.as_ref()
-            .map(|s| {
-                let now = jiff::Timestamp::now();
-                let mut ids: Vec<usize> = s.tasks.iter()
-                    .filter(|(id, task)| {
-                        ui::format_task(**id, task, &now).matches_filter(&filter_text)
-                    })
-                    .map(|(id, _)| *id)
-                    .collect();
-                ids.sort();
-                ids
-            })
-            .unwrap_or_default();
-
-        terminal.draw(|f| {
-            let log_view = if let AppMode::Log(log_state) = &app_mode {
-                Some((log_state.logs.as_str(), log_state.scroll_offset))
-            } else {
-                None
-            };
-
-            let mut ui_state = ui::UiState {
-                state: &state,
-                table_state: &mut table_state,
-                task_ids: &task_ids,
-                now: jiff::Timestamp::now(),
-                show_details,
-                filter_text: &filter_text,
-                input_mode: matches!(app_mode, AppMode::Filter),
-                log_view,
-            };
-
-            ui::draw(f, &mut ui_state);
-        })?;
-
-        // Calculate how much time is left until the next scheduled refresh (250ms).
-        // This ensures the TUI polls for input but still refreshes the state on schedule.
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or(Duration::from_secs(0));
-
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                let mut next_mode = None;
-                match &mut app_mode {
-                    AppMode::Filter => {
-                         match key.code {
-                             KeyCode::Esc => {
-                                 next_mode = Some(AppMode::Normal);
-                                 filter_text.clear();
-                             }
-                             KeyCode::Enter => {
-                                 next_mode = Some(AppMode::Normal);
-                             }
-                             KeyCode::Backspace => {
-                                 filter_text.pop();
-                             }
-                             KeyCode::Char(c) => {
-                                 filter_text.push(c);
-                             }
-                             _ => {}
-                         }
-                    }
-                    AppMode::Log(log_state) => {
-                        let terminal_size = terminal.size()?;
-                        let page_height = terminal_size.height.saturating_sub(2);
-                        let page_width = terminal_size.width.saturating_sub(2);
-
-                        if key.code == KeyCode::Char('q') {
-                            next_mode = Some(AppMode::Normal);
-                        } else {
-                            log_state.handle_key(key, page_height, page_width);
-                        }
-
-                        log_state.update_autoscroll(page_height, page_width);
-                    }
-                    AppMode::Normal => {
-                        if show_details {
-                             match key.code {
-                                 KeyCode::Esc => show_details = false,
-                                 KeyCode::Char('q') => return Ok(()),
-                                 _ => {}
-                             }
-                        } else {
-                            match key.code {
-                                KeyCode::Char('q') => return Ok(()),
-                                KeyCode::Esc => {
-                                    if !filter_text.is_empty() {
-                                        filter_text.clear();
-                                    }
-                                }
-                                KeyCode::Enter => {
-                                    if let Some(i) = table_state.selected() {
-                                        if let Some(id) = task_ids.get(i) {
-                                            next_mode = Some(AppMode::Log(LogState::new(*id)));
-                                            // Trigger immediate fetch in next iteration
-                                            last_tick = Instant::now() - tick_rate;
-                                        }
-                                    }
-                                }
-                                KeyCode::Char('d') => {
-                                    if table_state.selected().is_some() {
-                                        show_details = true;
-                                    }
-                                }
-                                KeyCode::Char('j') | KeyCode::Down => {
-                                    let i = match table_state.selected() {
-                                        Some(i) if !task_ids.is_empty() => {
-                                            if i >= task_ids.len().saturating_sub(1) {
-                                                i
-                                            } else {
-                                                i + 1
-                                            }
-                                        }
-                                        _ => 0,
-                                    };
-                                    table_state.select(Some(i));
-                                }
-                                KeyCode::Char('k') | KeyCode::Up => {
-                                    let i = match table_state.selected() {
-                                        Some(i) if !task_ids.is_empty() => {
-                                            if i == 0 {
-                                                0
-                                            } else {
-                                                i - 1
-                                            }
-                                        }
-                                        _ => 0,
-                                    };
-                                    table_state.select(Some(i));
-                                }
-                                KeyCode::PageUp => {
-                                    if !task_ids.is_empty() {
-                                        let offset = table_state.offset();
-                                        let selected = table_state.selected().unwrap_or(0);
-                                        if selected > offset {
-                                            table_state.select(Some(offset));
-                                        } else {
-                                            let terminal_size = terminal.size()?;
-                                            let visible_rows = terminal_size.height.saturating_sub(11) as usize;
-                                            table_state.select(Some(selected.saturating_sub(visible_rows)));
-                                        }
-                                    }
-                                }
-                                KeyCode::PageDown => {
-                                    if !task_ids.is_empty() {
-                                        let terminal_size = terminal.size()?;
-                                        let visible_rows = terminal_size.height.saturating_sub(11) as usize;
-                                        let offset = table_state.offset();
-                                        let bottom = (offset + visible_rows).saturating_sub(1).min(task_ids.len().saturating_sub(1));
-                                        let selected = table_state.selected().unwrap_or(0);
-                                        if selected < bottom {
-                                            table_state.select(Some(bottom));
-                                        } else {
-                                            table_state.select(Some((selected + visible_rows).min(task_ids.len().saturating_sub(1))));
-                                        }
-                                    }
-                                }
-                                KeyCode::Home => {
-                                    if !task_ids.is_empty() {
-                                        table_state.select(Some(0));
-                                    }
-                                }
-                                KeyCode::End => {
-                                    if !task_ids.is_empty() {
-                                        table_state.select(Some(task_ids.len().saturating_sub(1)));
-                                    }
-                                }
-                                KeyCode::Char('f') => {
-                                    app_mode = AppMode::Filter;
-                                }
-                                KeyCode::Char('s') => {
-                                    if let Some(i) = table_state.selected() {
-                                        if let Some(id) = task_ids.get(i) {
-                                            pueue_client.start_tasks(vec![*id]).await?;
-                                        }
-                                    }
-                                }
-                                KeyCode::Char('p') => {
-                                    if let Some(i) = table_state.selected() {
-                                        if let Some(id) = task_ids.get(i) {
-                                            pueue_client.pause_tasks(vec![*id]).await?;
-                                        }
-                                    }
-                                }
-                                KeyCode::Char('x') => {
-                                    if let Some(i) = table_state.selected() {
-                                        if let Some(id) = task_ids.get(i) {
-                                            pueue_client.kill_tasks(vec![*id]).await?;
-                                        }
-                                    }
-                                }
-                                KeyCode::Backspace => {
-                                    if let Some(i) = table_state.selected() {
-                                        if let Some(id) = task_ids.get(i) {
-                                            pueue_client.remove_tasks(vec![*id]).await?;
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-
-                if let Some(mode) = next_mode {
-                    app_mode = mode;
-                }
-            }
-        }
-    }
-}
