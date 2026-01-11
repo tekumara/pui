@@ -1,0 +1,8 @@
+---
+source: src/tests.rs
+expression: buffer_string
+---
+┌ Task Log (q to close) ─────────────────┐
+│AA                                      │
+│ZZ                                      │
+└────────────────────────────────────────┘
