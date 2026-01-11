@@ -1273,6 +1273,7 @@ dependencies = [
  "jiff",
  "pueue-lib",
  "ratatui",
+ "ratatui-widgets",
  "serde",
  "serde_json",
  "snap",
