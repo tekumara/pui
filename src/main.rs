@@ -5,7 +5,7 @@ mod tests;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -72,8 +72,8 @@ impl LogState {
         }
     }
 
-    fn handle_key(&mut self, key_code: KeyCode, page_height: u16) -> bool {
-        match key_code {
+    fn handle_key(&mut self, key: KeyEvent, page_height: u16) -> bool {
+        match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.scroll_offset = self.scroll_offset.saturating_add(1);
                 self.autoscroll = false;
@@ -82,21 +82,29 @@ impl LogState {
                 self.scroll_offset = self.scroll_offset.saturating_sub(1);
                 self.autoscroll = false;
             }
-            KeyCode::PageUp => {
+            KeyCode::PageUp | KeyCode::Char('b') => {
                 self.scroll_offset = self.scroll_offset.saturating_sub(page_height);
                 self.autoscroll = false;
             }
-            KeyCode::PageDown => {
+            KeyCode::PageDown | KeyCode::Char(' ') => {
                 self.scroll_offset = self.scroll_offset.saturating_add(page_height);
                 self.autoscroll = false;
             }
-            KeyCode::Home => {
+            KeyCode::Home | KeyCode::Char('g') => {
                 self.scroll_offset = 0;
                 self.autoscroll = false;
             }
-            KeyCode::End => {
+            KeyCode::End | KeyCode::Char('G') => {
                 self.autoscroll = true;
                 self.update_autoscroll(page_height);
+            }
+            KeyCode::Char('d') => {
+                self.scroll_offset = self.scroll_offset.saturating_add(page_height / 2);
+                self.autoscroll = false;
+            }
+            KeyCode::Char('u') => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(page_height / 2);
+                self.autoscroll = false;
             }
             _ => return false,
         }
@@ -221,7 +229,7 @@ where
                         if key.code == KeyCode::Char('q') {
                             next_mode = Some(AppMode::Normal);
                         } else {
-                            log_state.handle_key(key.code, page_height);
+                            log_state.handle_key(key, page_height);
                         }
 
                         log_state.update_autoscroll(page_height);
