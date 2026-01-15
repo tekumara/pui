@@ -125,7 +125,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         let size = f.area();
         let block = Block::default()
             .borders(Borders::ALL)
-            .title(" Task Log (q to close) ");
+            .title(" Task Log (Esc to close) ");
 
         // default tab stop width in terminals is typically 8 characters
         let logs = logs.replace('\t', "        ");
