@@ -225,7 +225,7 @@ impl App {
                 let page_height = terminal_size.1.saturating_sub(2);
                 let page_width = terminal_size.0.saturating_sub(2);
 
-                if key.code == KeyCode::Char('q') {
+                if key.code == KeyCode::Esc {
                     // Drop the stream client when exiting log mode
                     next_mode = Some(AppMode::Normal);
                 } else {
