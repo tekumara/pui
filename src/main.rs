@@ -10,7 +10,8 @@ use ratatui::{
     widgets::TableState,
     DefaultTerminal, Frame,
 };
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::MissedTickBehavior;
 
 use crate::pueue_client::{PueueClient, PueueClientOps};
 use pueue_lib::state::State;
@@ -46,8 +47,6 @@ pub struct App {
     event_stream: EventStream,
     /// Pueue client
     pueue_client: PueueClient,
-    /// Last tick time
-    last_tick: Instant,
     /// Tick rate
     tick_rate: Duration,
     /// Pueue state
@@ -72,7 +71,6 @@ impl App {
             running: false,
             event_stream: EventStream::new(),
             pueue_client,
-            last_tick: Instant::now(),
             tick_rate: Duration::from_millis(250),
             state: None,
             table_state,
@@ -85,13 +83,10 @@ impl App {
     /// Run the application's main loop using select! to handle multiple async sources.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
+        let mut tick_interval = tokio::time::interval(self.tick_rate);
+        tick_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
         while self.running {
-            // Calculate timeout for state refresh
-            let timeout = self.tick_rate
-                .checked_sub(self.last_tick.elapsed())
-                .unwrap_or(Duration::from_secs(0));
-
             // Draw the UI
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -110,7 +105,8 @@ impl App {
                     }
                 }
 
-                // Handle stream chunks when in Log mode with an active stream
+                // Stream logs when in Log mode with an active stream
+                // Chunks are produced once every 1000ms by the pueue client
                 chunk_result = async {
                     if let AppMode::Log(log_state) = &mut self.app_mode
                         && let Some(stream_client) = &mut log_state.stream_client
@@ -149,12 +145,11 @@ impl App {
                 }
 
                 // Tick timeout for state refresh
-                _ = tokio::time::sleep(timeout) => {
+                _ = tick_interval.tick() => {
                     // Fetch pueue state on tick
                     if let Ok(new_state) = self.pueue_client.get_state().await {
                         self.state = Some(new_state);
                     }
-                    self.last_tick = Instant::now();
                 }
             }
         }
