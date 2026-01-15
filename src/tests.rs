@@ -106,8 +106,12 @@ impl PueueClientOps for MockPueueClient {
         Ok(())
     }
 
-    async fn get_task_log(&mut self, _id: usize) -> Result<Option<String>> {
-        Ok(Some("Log line 1\nLog line 2\nLog line 3".to_string()))
+    async fn start_log_stream(&mut self, _id: usize, _lines: Option<usize>) -> Result<String> {
+        Ok("Log line 1\nLog line 2\nLog line 3".to_string())
+    }
+
+    async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
+        Ok(None) // Immediately close the stream for tests
     }
 }
 
