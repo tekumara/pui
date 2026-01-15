@@ -11,6 +11,7 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 
 use crate::pueue_client::{PueueClient, PueueClientOps};
 use pueue_lib::state::State;
@@ -86,21 +87,52 @@ impl App {
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
         while self.running {
-            // Fetch state if needed
+            // Fetch state if needed (only when not in Log mode, since streaming handles logs)
             let should_fetch = self.state.is_none() || self.last_tick.elapsed() >= self.tick_rate;
             if should_fetch {
                 if let Ok(new_state) = self.pueue_client.get_state().await {
                     self.state = Some(new_state);
                 }
+                self.last_tick = Instant::now();
+            }
 
-                // Fetch logs if in Log mode
-                if let AppMode::Log(log_state) = &mut self.app_mode {
-                    if let Ok(Some(new_logs)) = self.pueue_client.get_task_log(log_state.task_id).await {
-                        log_state.logs = new_logs;
+            // Process any pending stream messages
+            if let AppMode::Log(log_state) = &mut self.app_mode {
+                let mut stream_closed = false;
+                let mut received_chunks = false;
+
+                if let Some(rx) = &mut log_state.stream_rx {
+                    // Non-blocking receive of all available chunks
+                    loop {
+                        match rx.try_recv() {
+                            Ok(LogStreamMsg::Chunk(chunk)) => {
+                                log_state.logs.push_str(&chunk);
+                                received_chunks = true;
+                            }
+                            Ok(LogStreamMsg::Closed) => {
+                                stream_closed = true;
+                                break;
+                            }
+                            Err(mpsc::error::TryRecvError::Empty) => break,
+                            Err(mpsc::error::TryRecvError::Disconnected) => {
+                                stream_closed = true;
+                                break;
+                            }
+                        }
                     }
                 }
 
-                self.last_tick = Instant::now();
+                if stream_closed {
+                    log_state.stream_rx = None;
+                }
+
+                // Update autoscroll position if we received new content
+                if received_chunks && log_state.autoscroll {
+                    let terminal_size = crossterm::terminal::size()?;
+                    let page_height = terminal_size.1.saturating_sub(2);
+                    let page_width = terminal_size.0.saturating_sub(2);
+                    log_state.update_autoscroll(page_height, page_width);
+                }
             }
 
             terminal.draw(|frame| self.draw(frame))?;
@@ -195,6 +227,8 @@ impl App {
                 let page_width = terminal_size.0.saturating_sub(2);
 
                 if key.code == KeyCode::Char('q') {
+                    // Cancel any running stream before exiting log mode
+                    log_state.cancel_stream();
                     next_mode = Some(AppMode::Normal);
                 } else {
                     log_state.handle_key(key, page_height, page_width);
@@ -221,9 +255,15 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    next_mode = Some(AppMode::Log(LogState::new(*id)));
-                                    // Trigger immediate fetch in next iteration
-                                    self.last_tick = Instant::now() - self.tick_rate;
+                                    let task_id = *id;
+                                    // Spawn streaming task
+                                    let (tx, rx) = mpsc::channel::<LogStreamMsg>(100);
+                                    let handle = tokio::spawn(async move {
+                                        if let Err(e) = Self::run_log_stream(task_id, tx).await {
+                                            eprintln!("Log stream error: {:?}", e);
+                                        }
+                                    });
+                                    next_mode = Some(AppMode::Log(LogState::with_streaming(task_id, rx, handle)));
                                 }
                             }
                         }
@@ -370,6 +410,53 @@ impl App {
     fn quit(&mut self) {
         self.running = false;
     }
+
+    /// Run log streaming in a background task
+    async fn run_log_stream(task_id: usize, tx: mpsc::Sender<LogStreamMsg>) -> Result<()> {
+        // Create a new client for streaming (streaming takes over the connection)
+        let mut stream_client = PueueClient::new().await?;
+
+        // Start the stream
+        let initial_logs = stream_client.start_log_stream(task_id, None).await?;
+        if !initial_logs.is_empty()
+            && tx.send(LogStreamMsg::Chunk(initial_logs)).await.is_err()
+        {
+            return Ok(()); // Receiver dropped, stop streaming
+        }
+
+        // Receive stream chunks until closed
+        loop {
+            match stream_client.receive_stream_chunk().await {
+                Ok(Some(chunk)) => {
+                    if !chunk.is_empty()
+                        && tx.send(LogStreamMsg::Chunk(chunk)).await.is_err()
+                    {
+                        return Ok(()); // Receiver dropped, stop streaming
+                    }
+                }
+                Ok(None) => {
+                    // Stream closed (task finished)
+                    let _ = tx.send(LogStreamMsg::Closed).await;
+                    break;
+                }
+                Err(_) => {
+                    // Error receiving chunk, close the stream
+                    let _ = tx.send(LogStreamMsg::Closed).await;
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Message sent from the log streaming task to the main app
+pub enum LogStreamMsg {
+    /// New log content chunk
+    Chunk(String),
+    /// Stream has closed (task finished or error)
+    Closed,
 }
 
 #[derive(Debug)]
@@ -378,6 +465,10 @@ pub struct LogState {
     pub logs: String,
     pub scroll_offset: u16,
     pub autoscroll: bool,
+    /// Receiver for streaming log chunks
+    pub stream_rx: Option<mpsc::Receiver<LogStreamMsg>>,
+    /// Handle to cancel the streaming task
+    pub stream_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl LogState {
@@ -387,7 +478,33 @@ impl LogState {
             logs: String::new(),
             scroll_offset: 0,
             autoscroll: true,
+            stream_rx: None,
+            stream_handle: None,
         }
+    }
+
+    /// Create a new LogState with streaming enabled
+    pub fn with_streaming(
+        task_id: usize,
+        stream_rx: mpsc::Receiver<LogStreamMsg>,
+        stream_handle: tokio::task::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            task_id,
+            logs: String::new(),
+            scroll_offset: 0,
+            autoscroll: true,
+            stream_rx: Some(stream_rx),
+            stream_handle: Some(stream_handle),
+        }
+    }
+
+    /// Cancel the streaming task if running
+    pub fn cancel_stream(&mut self) {
+        if let Some(handle) = self.stream_handle.take() {
+            handle.abort();
+        }
+        self.stream_rx = None;
     }
 
     pub fn handle_key(&mut self, key: KeyEvent, page_height: u16, page_width: u16) -> bool {

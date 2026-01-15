@@ -7,16 +7,17 @@ use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
 use pueue_lib::tls::load_certificate;
 
-use snap::read::FrameDecoder;
-use std::io::Read;
-
 pub trait PueueClientOps {
     async fn get_state(&mut self) -> Result<State>;
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
-    async fn get_task_log(&mut self, id: usize) -> Result<Option<String>>;
+    /// Start streaming logs for a task. Returns the initial log content.
+    /// Use `receive_stream_chunk` to get subsequent chunks.
+    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String>;
+    /// Receive the next chunk of streamed logs. Returns None if stream closed.
+    async fn receive_stream_chunk(&mut self) -> Result<Option<String>>;
 }
 
 #[derive(Debug)]
@@ -96,35 +97,36 @@ impl PueueClientOps for PueueClient {
         Ok(())
     }
 
-    async fn get_task_log(&mut self, id: usize) -> Result<Option<String>> {
-        self.client.send_request(Request::Log(LogRequest {
+    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String> {
+        self.client.send_request(Request::Stream(StreamRequest {
             tasks: TaskSelection::TaskIds(vec![id]),
-            send_logs: true,
-            lines: None,
-        })).await.map_err(|e| anyhow!("Failed to send log request: {:?}", e))?;
+            lines,
+        })).await.map_err(|e| anyhow!("Failed to send stream request: {:?}", e))?;
 
-        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive log response: {:?}", e))?;
+        // First response contains the initial log content
+        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive stream response: {:?}", e))?;
 
-        if let Response::Log(mut logs) = response {
-            if let Some(task_log) = logs.remove(&id) {
-                Ok(task_log.output.map(|bytes| self.decompress_log(bytes)))
-            } else {
-                Err(anyhow!("Task {} not found in log response", id))
+        match response {
+            Response::Stream(stream_response) => {
+                Ok(stream_response.logs.get(&id).cloned().unwrap_or_default())
             }
-        } else {
-            Err(anyhow!("Unexpected response from pueue daemon: {:?}", response))
+            Response::Failure(msg) => Err(anyhow!("Stream request failed: {}", msg)),
+            _ => Err(anyhow!("Unexpected response from pueue daemon: {:?}", response)),
         }
     }
-}
 
-impl PueueClient {
-    fn decompress_log(&self, bytes: Vec<u8>) -> String {
-        let mut decoder = FrameDecoder::new(&bytes[..]);
-        let mut decompressed = Vec::new();
+    async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
+        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive stream chunk: {:?}", e))?;
 
-        match decoder.read_to_end(&mut decompressed) {
-            Ok(_) => String::from_utf8_lossy(&decompressed).into_owned(),
-            Err(_) => String::from_utf8_lossy(&bytes).into_owned(),
+        match response {
+            Response::Stream(stream_response) => {
+                // Concatenate all task logs (typically just one)
+                let combined: String = stream_response.logs.values().cloned().collect();
+                Ok(Some(combined))
+            }
+            Response::Close => Ok(None),
+            Response::Failure(msg) => Err(anyhow!("Stream failed: {}", msg)),
+            _ => Err(anyhow!("Unexpected response during streaming: {:?}", response)),
         }
     }
 }
