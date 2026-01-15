@@ -415,13 +415,22 @@ impl App {
         let mut stream_client = PueueClient::new().await?;
         let initial_logs = stream_client.start_log_stream(task_id, None).await?;
 
-        Ok(LogState {
+        let mut log_state = LogState {
             task_id,
             logs: initial_logs,
             scroll_offset: 0,
             autoscroll: true,
             stream_client: Some(stream_client),
-        })
+        };
+
+        // Scroll to end of initial logs
+        if let Ok(terminal_size) = crossterm::terminal::size() {
+            let page_height = terminal_size.1.saturating_sub(2);
+            let page_width = terminal_size.0.saturating_sub(2);
+            log_state.update_autoscroll(page_height, page_width);
+        }
+
+        Ok(log_state)
     }
 }
 
@@ -520,3 +529,4 @@ impl LogState {
         }
     }
 }
+
