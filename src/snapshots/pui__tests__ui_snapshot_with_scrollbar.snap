@@ -4,7 +4,7 @@ expression: buffer_string
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Start | p: Pause | x: Kill | Ba│ 
+ │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────↑ 
  │   Id   Status       Command                Path                  Duration  ║ 

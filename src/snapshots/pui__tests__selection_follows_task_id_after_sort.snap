@@ -8,8 +8,8 @@ expression: buffer_string
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
  │   Id   Status       Command                Path                  Duration  │ 
- │>> 0    Running      sleep 60               /tmp                  0s        │ 
- │   2    Failed (1)   false                  /tmp                  0s        │ 
+ │>> 1    Queued       aaa                    /tmp                  -         │ 
+ │   0    Queued       zzz                    /tmp                  -         │ 
  │                                                                            │ 
  │                                                                            │ 
  │                                                                            │ 

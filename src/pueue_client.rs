@@ -19,6 +19,8 @@ pub trait PueueClientOps {
     async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String>;
     /// Receive the next chunk of streamed logs. Returns None if stream closed.
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>>;
+    /// Reconnect to the pueue daemon.
+    async fn reconnect(&mut self) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -139,5 +141,11 @@ impl PueueClientOps for PueueClient {
             Response::Failure(msg) => Err(anyhow!("Stream failed: {}", msg)),
             _ => Err(anyhow!("Unexpected response during streaming: {:?}", response)),
         }
+    }
+
+    async fn reconnect(&mut self) -> Result<()> {
+        let new_self = Self::new().await?;
+        self.client = new_self.client;
+        Ok(())
     }
 }

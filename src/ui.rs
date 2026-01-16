@@ -1,12 +1,14 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap},
     Frame,
 };
 use std::path::Path;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
+use crate::SortField;
 
 pub fn status_display(status: &TaskStatus) -> String {
     match status {
@@ -117,6 +119,8 @@ pub struct UiState<'a> {
     pub show_details: bool,
     pub filter_text: &'a str,
     pub input_mode: bool,
+    pub sort_mode: bool,
+    pub sort_field: SortField,
     pub log_view: Option<(&'a str, u16)>,
     pub connection_error: Option<&'a str>,
     pub error_modal: Option<&'a str>,
@@ -153,7 +157,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Start | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
@@ -260,18 +264,46 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         f.render_widget(loading, table_area);
     }
 
-    let (footer_text, footer_style) = if let Some(error) = ui_state.connection_error {
-        (error.to_string(), Style::default().fg(Color::Red))
+    let footer_content: Line = if let Some(error) = ui_state.connection_error {
+        Line::from(error).style(Style::default().fg(Color::Red))
+    } else if ui_state.sort_mode {
+        // Build sort options with highlighting for currently selected field
+        let highlight = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let normal = Style::default();
+
+        let id_style = if ui_state.sort_field == SortField::Id { highlight } else { normal };
+        let status_style = if ui_state.sort_field == SortField::Status { highlight } else { normal };
+        let command_style = if ui_state.sort_field == SortField::Command { highlight } else { normal };
+        let path_style = if ui_state.sort_field == SortField::Path { highlight } else { normal };
+
+        Line::from(vec![
+            Span::raw("Sort by: "),
+            Span::raw("[").style(id_style),
+            Span::raw("i").style(id_style.add_modifier(Modifier::UNDERLINED)),
+            Span::raw("]d").style(id_style),
+            Span::raw(" | "),
+            Span::raw("[").style(status_style),
+            Span::raw("s").style(status_style.add_modifier(Modifier::UNDERLINED)),
+            Span::raw("]tatus").style(status_style),
+            Span::raw(" | "),
+            Span::raw("[").style(command_style),
+            Span::raw("c").style(command_style.add_modifier(Modifier::UNDERLINED)),
+            Span::raw("]ommand").style(command_style),
+            Span::raw(" | "),
+            Span::raw("[").style(path_style),
+            Span::raw("p").style(path_style.add_modifier(Modifier::UNDERLINED)),
+            Span::raw("]ath").style(path_style),
+            Span::raw(" | Esc: cancel"),
+        ])
     } else if ui_state.input_mode {
-        (format!("Filter: {}_ (Esc to clear)", ui_state.filter_text), Style::default())
+        Line::from(format!("Filter: {}_ (Esc to clear)", ui_state.filter_text))
     } else if !ui_state.filter_text.is_empty() {
-        (format!("Filter: {} (Esc to clear)", ui_state.filter_text), Style::default())
+        Line::from(format!("Filter: {} (Esc to clear)", ui_state.filter_text))
     } else {
-        ("Connected to Pueue daemon".to_string(), Style::default())
+        Line::from("Connected to Pueue daemon")
     };
 
-    let footer = Paragraph::new(footer_text)
-        .style(footer_style)
+    let footer = Paragraph::new(footer_content)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
 
