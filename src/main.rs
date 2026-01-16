@@ -270,8 +270,9 @@ impl App {
                             let task_ids = self.get_filtered_task_ids();
                             let i = match self.table_state.selected() {
                                 Some(i) if !task_ids.is_empty() => {
+                                    // Wrap to the top when moving down from the last row.
                                     if i >= task_ids.len().saturating_sub(1) {
-                                        i
+                                        0
                                     } else {
                                         i + 1
                                     }
@@ -284,8 +285,9 @@ impl App {
                             let task_ids = self.get_filtered_task_ids();
                             let i = match self.table_state.selected() {
                                 Some(i) if !task_ids.is_empty() => {
+                                    // Wrap to the bottom when moving up from the first row.
                                     if i == 0 {
-                                        0
+                                        task_ids.len().saturating_sub(1)
                                     } else {
                                         i - 1
                                     }
