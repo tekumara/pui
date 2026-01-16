@@ -369,6 +369,8 @@ impl App {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     self.pueue_client.remove_tasks(vec![*id]).await?;
+                                    let next_index = if i > 0 { i - 1 } else { 0 };
+                                    self.table_state.select(Some(next_index));
                                 }
                             }
                         }

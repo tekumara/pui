@@ -315,6 +315,44 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_ui_snapshot_remove_task() -> Result<()> {
+    let (mut state, _, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    // Remove task with ID 1 to verify UI updates
+    state.tasks.remove(&1);
+    let mut task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
+    task_ids.sort();
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            log_view: None,
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_ui_snapshot_log_view() -> Result<()> {
     let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
     let mut table_state = TableState::default();
