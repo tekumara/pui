@@ -443,12 +443,20 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    if let Err(e) = self.pueue_client.remove_tasks(vec![*id]).await {
-                                        self.error_modal = Some(format!("Failed to remove task: {}", e));
-                                    } else {
-                                        let _ = self.refresh_state().await;
-                                        let next_index = if i > 0 { i - 1 } else { 0 };
-                                        self.table_state.select(Some(next_index));
+                                    let task_id = *id;
+                                    // Don't remove running or paused tasks
+                                    let is_active = self.state.as_ref()
+                                        .and_then(|s| s.tasks.get(&task_id))
+                                        .is_some_and(|t| matches!(t.status, TaskStatus::Running { .. } | TaskStatus::Paused { .. }));
+
+                                    if !is_active {
+                                        if let Err(e) = self.pueue_client.remove_tasks(vec![task_id]).await {
+                                            self.error_modal = Some(format!("Failed to remove task: {}", e));
+                                        } else {
+                                            let _ = self.refresh_state().await;
+                                            let next_index = if i > 0 { i - 1 } else { 0 };
+                                            self.table_state.select(Some(next_index));
+                                        }
                                     }
                                 }
                             }
