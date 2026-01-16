@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{Local, TimeZone};
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{EventStream, KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{Terminal, backend::TestBackend, widgets::TableState};
@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::LogState;
+use crate::SortField;
 use crate::pueue_client::PueueClientOps;
 use crate::ui;
 use pueue_lib::message::TaskToRestart;
@@ -118,6 +119,10 @@ impl PueueClientOps for MockPueueClient {
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
         Ok(None) // Immediately close the stream for tests
     }
+
+    async fn reconnect(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 async fn setup_test_ui() -> Result<(State, Vec<usize>, Terminal<TestBackend>, jiff::Timestamp)> {
@@ -154,6 +159,8 @@ async fn test_ui_snapshot() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: None,
             connection_error: None,
             error_modal: None,
@@ -197,6 +204,8 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
             show_details: true,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: None,
             connection_error: None,
             error_modal: None,
@@ -263,6 +272,8 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: None,
             connection_error: None,
             error_modal: None,
@@ -307,6 +318,8 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
             show_details: false,
             filter_text: "1",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: None,
             connection_error: None,
             error_modal: None,
@@ -347,6 +360,8 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: None,
             connection_error: None,
             error_modal: None,
@@ -390,6 +405,8 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: Some((logs, scroll_offset)),
             connection_error: None,
             error_modal: None,
@@ -453,6 +470,8 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
             connection_error: None,
             error_modal: None,
@@ -530,6 +549,8 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
             show_details: false,
             filter_text: "",
             input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
             connection_error: None,
             error_modal: None,
@@ -556,6 +577,85 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
         "Expected last visible content line to contain the end marker, but got: {:?}",
         content_lines[1]
     );
+
+    insta::assert_snapshot!(buffer_string);
+
+    Ok(())
+}
+
+/// Test that selection follows task ID when sort order changes
+#[tokio::test]
+async fn test_selection_follows_task_id_after_sort() -> Result<()> {
+    use crate::App;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    // Create a state with tasks that will reorder when sorted differently
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    // Task 0: command "zzz" (will be last alphabetically)
+    let task0 = Task {
+        id: 0,
+        created_at: now,
+        original_command: "zzz".to_string(),
+        command: "zzz".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Queued { enqueued_at: now },
+    };
+
+    // Task 1: command "aaa" (will be first alphabetically)
+    let task1 = Task {
+        id: 1,
+        created_at: now,
+        original_command: "aaa".to_string(),
+        command: "aaa".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Queued { enqueued_at: now },
+    };
+
+    state.tasks.insert(0, task0);
+    state.tasks.insert(1, task1);
+
+    let mock_client = MockPueueClient { state: state.clone() };
+    let mut app = App::new(mock_client);
+    app.state = Some(state);
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+
+    // 1. select a task (Task 1 at row 1 when sorted by ID)
+    app.table_state.select(Some(1));
+    app.update_selected_task_id();
+    assert_eq!(app.selected_task_id, Some(1));
+
+    // 2. resorts the table so that the selected task ends up in a different row
+    app.sort_field = SortField::Command;
+
+    // 3. checks that the selected is still for the task in 1.
+    // This triggers the sync logic via redraw
+    terminal.draw(|f| app.draw(f))?;
+
+    assert_eq!(app.selected_task_id, Some(1), "Selection should still be Task 1");
+    assert_eq!(app.table_state.selected(), Some(0), "Task 1 (aaa) should now be at row 0");
+
+    let buffer = terminal.backend().buffer();
+    let buffer_string = buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
 
     insta::assert_snapshot!(buffer_string);
 
