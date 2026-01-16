@@ -59,6 +59,10 @@ pub struct App {
     app_mode: AppMode,
     /// Filter text
     filter_text: String,
+    /// Connection status message for footer (e.g., "Not connected")
+    connection_error: Option<String>,
+    /// Error modal message (dismissible with Esc)
+    error_modal: Option<String>,
 }
 
 impl App {
@@ -77,6 +81,8 @@ impl App {
             show_details: false,
             app_mode: AppMode::Normal,
             filter_text: String::new(),
+            connection_error: None,
+            error_modal: None,
         }
     }
 
@@ -147,8 +153,35 @@ impl App {
                 // Tick timeout for state refresh
                 _ = tick_interval.tick() => {
                     // Fetch pueue state on tick
-                    // Ignore errors to keep the app running even if state fetch fails
-                    let _ = self.refresh_state().await;
+                    // Show connection errors in footer but keep running
+                    match self.refresh_state().await {
+                        Ok(()) => {
+                            self.connection_error = None;
+                        }
+                        Err(e) => {
+                            let err_str = e.to_string().to_lowercase();
+                            if err_str.contains("broken pipe") || err_str.contains("connection") {
+                                // Try to reconnect
+                                self.connection_error = Some("Reconnecting to Pueue daemon...".to_string());
+                                match PueueClient::new().await {
+                                    Ok(new_client) => {
+                                        self.pueue_client = new_client;
+                                        // Try to refresh state with new client
+                                        if let Err(e) = self.refresh_state().await {
+                                            self.connection_error = Some(format!("Reconnection failed: {}", e));
+                                        } else {
+                                            self.connection_error = None;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        self.connection_error = Some(format!("Reconnection failed: {}", e));
+                                    }
+                                }
+                            } else {
+                                self.connection_error = Some(format!("Error: {}", e));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -186,6 +219,8 @@ impl App {
             filter_text: &self.filter_text,
             input_mode: matches!(self.app_mode, AppMode::Filter),
             log_view,
+            connection_error: self.connection_error.as_deref(),
+            error_modal: self.error_modal.as_deref(),
         };
 
         ui::draw(frame, &mut ui_state);
@@ -229,7 +264,14 @@ impl App {
                 log_state.update_autoscroll(page_height, page_width);
             }
             AppMode::Normal => {
-                if self.show_details {
+                // Handle error modal first - Esc dismisses it
+                if self.error_modal.is_some() {
+                    match key.code {
+                        KeyCode::Esc => self.error_modal = None,
+                        KeyCode::Char('q') => self.quit(),
+                        _ => {}
+                    }
+                } else if self.show_details {
                     match key.code {
                         KeyCode::Esc => self.show_details = false,
                         KeyCode::Char('q') => self.quit(),
@@ -254,7 +296,7 @@ impl App {
                                             next_mode = Some(AppMode::Log(log_state));
                                         }
                                         Err(e) => {
-                                            eprintln!("Failed to start log stream: {:?}", e);
+                                            self.error_modal = Some(format!("Failed to start log stream: {}", e));
                                         }
                                     }
                                 }
@@ -343,8 +385,11 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    self.pueue_client.start_tasks(vec![*id]).await?;
-                                    self.refresh_state().await?;
+                                    if let Err(e) = self.pueue_client.start_tasks(vec![*id]).await {
+                                        self.error_modal = Some(format!("Failed to start task: {}", e));
+                                    } else {
+                                        let _ = self.refresh_state().await;
+                                    }
                                 }
                             }
                         }
@@ -352,8 +397,11 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    self.pueue_client.pause_tasks(vec![*id]).await?;
-                                    self.refresh_state().await?;
+                                    if let Err(e) = self.pueue_client.pause_tasks(vec![*id]).await {
+                                        self.error_modal = Some(format!("Failed to pause task: {}", e));
+                                    } else {
+                                        let _ = self.refresh_state().await;
+                                    }
                                 }
                             }
                         }
@@ -361,8 +409,11 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    self.pueue_client.kill_tasks(vec![*id]).await?;
-                                    self.refresh_state().await?;
+                                    if let Err(e) = self.pueue_client.kill_tasks(vec![*id]).await {
+                                        self.error_modal = Some(format!("Failed to kill task: {}", e));
+                                    } else {
+                                        let _ = self.refresh_state().await;
+                                    }
                                 }
                             }
                         }
@@ -370,10 +421,13 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    self.pueue_client.remove_tasks(vec![*id]).await?;
-                                    self.refresh_state().await?;
-                                    let next_index = if i > 0 { i - 1 } else { 0 };
-                                    self.table_state.select(Some(next_index));
+                                    if let Err(e) = self.pueue_client.remove_tasks(vec![*id]).await {
+                                        self.error_modal = Some(format!("Failed to remove task: {}", e));
+                                    } else {
+                                        let _ = self.refresh_state().await;
+                                        let next_index = if i > 0 { i - 1 } else { 0 };
+                                        self.table_state.select(Some(next_index));
+                                    }
                                 }
                             }
                         }

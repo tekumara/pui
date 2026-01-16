@@ -2,26 +2,26 @@
 source: src/tests.rs
 expression: buffer_string
 ---
-
- ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐
-│j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Start | p: Pause | x: Kill | Backs│
- └────────────────────────────────────────────────────────────────────────────┘
- ┌ Tasks ─────────────────────────────────────────────────────────────────────┐
- │   Id   Status┌ Details (Esc to close) ──────────────────────┐    Duration  │
- │>> 0    Runnin│ID: 0                                         │/w/ 0s        │
- │   1    Succes│Status: Running                               │    0s        │
- │   2    Failed│Command: long_command --option1 value1        │    0s        │
- │              │--option2 value2 --option3 value3 --option4   │              │
- │              │value4 --option5 value5 --option6 value6      │              │
- │              │Path: /v/l/p/t/a/d/t/s/d/w/a/s/p/i/t/u/view   │              │
- │              │Duration: 0s                                  │              │
- │              │Group: default                                │              │
- │              │                                              │              │
- │              │Full Command: long_command --option1 value1   │              │
- │              │--option2 value2 --option3 value3 --option4   │              │
- │              │value4 --option5 value5 --option6 value6      │              │
- │              └──────────────────────────────────────────────┘              │
- └────────────────────────────────────────────────────────────────────────────┘
- ┌────────────────────────────────────────────────────────────────────────────┐
- │Connected to Pueue daemon                                                   │
+                                                                                
+ ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
+ │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Start | p: Pause | x: Kill | Ba│ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+ ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
+ │   Id   Status┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
+ │>> 0    Runnin│ID: 0                                         │/w/ 0s        │ 
+ │   1    Succes│Status: Running                               │    0s        │ 
+ │   2    Failed│Command: long_command --option1 value1        │    0s        │ 
+ │              │--option2 value2 --option3 value3 --option4   │              │ 
+ │              │value4 --option5 value5 --option6 value6      │              │ 
+ │              │Path: /v/l/p/t/a/d/t/s/d/w/a/s/p/i/t/u/view   │              │ 
+ │              │Duration: 0s                                  │              │ 
+ │              │Group: default                                │              │ 
+ │              │                                              │              │ 
+ │              │Full Command: long_command --option1 value1   │              │ 
+ │              │--option2 value2 --option3 value3 --option4   │              │ 
+ │              │value4 --option5 value5 --option6 value6      │              │ 
+ │              └──────────────────────────────────────────────┘              │ 
+ └────────────────────────────────────────────────────────────────────────────┘ 
+ ┌────────────────────────────────────────────────────────────────────────────┐ 
+ │Connected to Pueue daemon                                                   │ 
  └────────────────────────────────────────────────────────────────────────────┘

@@ -118,6 +118,8 @@ pub struct UiState<'a> {
     pub filter_text: &'a str,
     pub input_mode: bool,
     pub log_view: Option<(&'a str, u16)>,
+    pub connection_error: Option<&'a str>,
+    pub error_modal: Option<&'a str>,
 }
 
 pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
@@ -258,15 +260,30 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         f.render_widget(loading, table_area);
     }
 
-    let footer_text = if ui_state.input_mode {
-        format!("Filter: {}_ (Esc to clear)", ui_state.filter_text)
+    let (footer_text, footer_style) = if let Some(error) = ui_state.connection_error {
+        (error.to_string(), Style::default().fg(Color::Red))
+    } else if ui_state.input_mode {
+        (format!("Filter: {}_ (Esc to clear)", ui_state.filter_text), Style::default())
     } else if !ui_state.filter_text.is_empty() {
-        format!("Filter: {} (Esc to clear)", ui_state.filter_text)
+        (format!("Filter: {} (Esc to clear)", ui_state.filter_text), Style::default())
     } else {
-        "Connected to Pueue daemon".to_string()
+        ("Connected to Pueue daemon".to_string(), Style::default())
     };
 
     let footer = Paragraph::new(footer_text)
+        .style(footer_style)
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
+
+    // Error modal (takes priority over everything else)
+    if let Some(error) = ui_state.error_modal {
+        let area = centered_rect(60, 20, f.area());
+        f.render_widget(Clear, area);
+
+        let error_block = Paragraph::new(error)
+            .style(Style::default().fg(Color::Red))
+            .block(Block::default().borders(Borders::ALL).title(" Error (Esc to dismiss) ").border_style(Style::default().fg(Color::Red)))
+            .wrap(Wrap { trim: false });
+        f.render_widget(error_block, area);
+    }
 }

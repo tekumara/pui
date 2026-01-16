@@ -150,6 +150,8 @@ async fn test_ui_snapshot() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: None,
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -191,6 +193,8 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: None,
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -255,6 +259,8 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: None,
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -297,6 +303,8 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
             filter_text: "1",
             input_mode: false,
             log_view: None,
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -335,6 +343,8 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: None,
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -376,6 +386,8 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: Some((logs, scroll_offset)),
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -437,6 +449,8 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -512,6 +526,8 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
             filter_text: "",
             input_mode: false,
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
+            connection_error: None,
+            error_modal: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
