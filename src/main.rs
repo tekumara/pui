@@ -147,9 +147,8 @@ impl App {
                 // Tick timeout for state refresh
                 _ = tick_interval.tick() => {
                     // Fetch pueue state on tick
-                    if let Ok(new_state) = self.pueue_client.get_state().await {
-                        self.state = Some(new_state);
-                    }
+                    // Ignore errors to keep the app running even if state fetch fails
+                    let _ = self.refresh_state().await;
                 }
             }
         }
@@ -345,6 +344,7 @@ impl App {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     self.pueue_client.start_tasks(vec![*id]).await?;
+                                    self.refresh_state().await?;
                                 }
                             }
                         }
@@ -353,6 +353,7 @@ impl App {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     self.pueue_client.pause_tasks(vec![*id]).await?;
+                                    self.refresh_state().await?;
                                 }
                             }
                         }
@@ -361,6 +362,7 @@ impl App {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     self.pueue_client.kill_tasks(vec![*id]).await?;
+                                    self.refresh_state().await?;
                                 }
                             }
                         }
@@ -369,6 +371,7 @@ impl App {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     self.pueue_client.remove_tasks(vec![*id]).await?;
+                                    self.refresh_state().await?;
                                     let next_index = if i > 0 { i - 1 } else { 0 };
                                     self.table_state.select(Some(next_index));
                                 }
@@ -402,6 +405,13 @@ impl App {
                 ids
             })
             .unwrap_or_default()
+    }
+
+    /// Refresh the state immediately from the pueue client
+    async fn refresh_state(&mut self) -> Result<()> {
+        let new_state = self.pueue_client.get_state().await?;
+        self.state = Some(new_state);
+        Ok(())
     }
 
     /// Set running to false to quit the application.
