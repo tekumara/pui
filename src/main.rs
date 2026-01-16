@@ -14,7 +14,9 @@ use std::time::Duration;
 use tokio::time::MissedTickBehavior;
 
 use crate::pueue_client::{PueueClient, PueueClientOps};
+use pueue_lib::message::TaskToRestart;
 use pueue_lib::state::State;
+use pueue_lib::task::TaskStatus;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -385,7 +387,27 @@ impl App {
                             if let Some(i) = self.table_state.selected() {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
-                                    if let Err(e) = self.pueue_client.start_tasks(vec![*id]).await {
+                                    let task_id = *id;
+                                    // Check if task is Done (finished/failed) - needs restart instead of start
+                                    let is_done = self.state.as_ref()
+                                        .and_then(|s| s.tasks.get(&task_id))
+                                        .is_some_and(|t| matches!(t.status, TaskStatus::Done { .. }));
+
+                                    let result = if is_done {
+                                        // Restart the finished/failed task
+                                        let task = self.state.as_ref().unwrap().tasks.get(&task_id).unwrap();
+                                        self.pueue_client.restart_tasks(vec![TaskToRestart {
+                                            task_id,
+                                            original_command: task.original_command.clone(),
+                                            path: task.path.clone(),
+                                            label: task.label.clone(),
+                                            priority: task.priority,
+                                        }]).await
+                                    } else {
+                                        self.pueue_client.start_tasks(vec![task_id]).await
+                                    };
+
+                                    if let Err(e) = result {
                                         self.error_modal = Some(format!("Failed to start task: {}", e));
                                     } else {
                                         let _ = self.refresh_state().await;

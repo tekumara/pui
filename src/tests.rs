@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use crate::LogState;
 use crate::pueue_client::PueueClientOps;
 use crate::ui;
+use pueue_lib::message::TaskToRestart;
 
 pub struct MockPueueClient {
     state: State,
@@ -91,6 +92,10 @@ impl PueueClientOps for MockPueueClient {
     }
 
     async fn start_tasks(&mut self, _ids: Vec<usize>) -> Result<()> {
+        Ok(())
+    }
+
+    async fn restart_tasks(&mut self, _tasks: Vec<TaskToRestart>) -> Result<()> {
         Ok(())
     }
 
