@@ -7,7 +7,7 @@ use pueue_lib::settings::Settings;
 use pueue_lib::state::State;
 use pueue_lib::tls::load_certificate;
 
-pub trait PueueClientOps {
+pub(crate) trait PueueClientOps {
     async fn get_state(&mut self) -> Result<State>;
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn restart_tasks(&mut self, tasks: Vec<TaskToRestart>) -> Result<()>;
