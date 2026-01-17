@@ -50,7 +50,7 @@ enum AppMode {
 }
 
 #[derive(Debug)]
-pub struct App<P: PueueClientOps> {
+pub(crate) struct App<P: PueueClientOps> {
     /// Is the application running?
     running: bool,
     /// Event stream
