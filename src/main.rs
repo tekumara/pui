@@ -566,8 +566,7 @@ impl<P: PueueClientOps> App<P> {
                                     .collect();
 
                                 if !removable.is_empty() {
-                                    if let Err(e) =
-                                        self.pueue_client.remove_tasks(removable).await
+                                    if let Err(e) = self.pueue_client.remove_tasks(removable).await
                                     {
                                         self.error_modal =
                                             Some(format!("Failed to remove task(s): {}", e));

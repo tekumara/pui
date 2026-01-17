@@ -8,7 +8,7 @@ expression: ui
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
  │     Id   Stat┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
- │>>   0    Runn│ID: 0                                         │d/w 0s        │ 
+ │>>   0    Runn│ID: 0                                         │s/p 0s        │ 
  │     1    Succ│Status: Running                               │    0s        │ 
  │     2    Fail│Command: long_command --option1 value1        │    0s        │ 
  │              │--option2 value2 --option3 value3 --option4   │              │ 

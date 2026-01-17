@@ -1,7 +1,6 @@
 use crate::SortField;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use std::collections::HashSet;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -12,6 +11,7 @@ use ratatui::{
         ScrollbarState, Table, TableState, Wrap,
     },
 };
+use std::collections::HashSet;
 use std::path::Path;
 
 pub fn status_display(status: &TaskStatus) -> String {
@@ -226,12 +226,12 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         );
 
         let widths = [
-            Constraint::Length(1),
-            Constraint::Length(4),
-            Constraint::Length(12),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
-            Constraint::Length(10),
+            Constraint::Length(1),      // Select indicator
+            Constraint::Length(4),      // Id
+            Constraint::Length(12),     // Status
+            Constraint::Percentage(20), // Command
+            Constraint::Percentage(80), // Path
+            Constraint::Length(10),     // Duration
         ];
 
         let task_table = Table::new(rows, widths)
@@ -361,7 +361,10 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     } else if !ui_state.filter_text.is_empty() {
         Line::from(format!("Filter: {} (Esc to clear)", ui_state.filter_text))
     } else if !ui_state.selected_task_ids.is_empty() {
-        Line::from(format!("{} selected (Esc to clear)", ui_state.selected_task_ids.len()))
+        Line::from(format!(
+            "{} selected (Esc to clear)",
+            ui_state.selected_task_ids.len()
+        ))
     } else {
         Line::from("Connected to Pueue daemon")
     };

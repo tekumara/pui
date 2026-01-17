@@ -7,9 +7,9 @@ expression: ui
  │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │     Id   Status       Command               Path                 Duration  │ 
- │>>   1    Queued       aaa                   /tmp                 -         │ 
- │     0    Queued       zzz                   /tmp                 -         │ 
+ │     Id   Status       Command         Path                       Duration  │ 
+ │>>   1    Queued       aaa             /tmp                       -         │ 
+ │     0    Queued       zzz             /tmp                       -         │ 
  │                                                                            │ 
  │                                                                            │ 
  │                                                                            │ 
