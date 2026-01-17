@@ -171,7 +171,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
