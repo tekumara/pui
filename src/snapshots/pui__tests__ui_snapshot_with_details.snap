@@ -4,7 +4,7 @@ expression: ui
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
+ │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
  │     Id   Stat┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
