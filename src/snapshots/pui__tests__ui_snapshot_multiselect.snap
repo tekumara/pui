@@ -7,11 +7,11 @@ expression: ui
  │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │     Id   Status       Command               Path                 Duration  │ 
- │>> * 0    Queued       task_0                /tmp                 -         │ 
- │     1    Queued       task_1                /tmp                 -         │ 
- │   * 2    Queued       task_2                /tmp                 -         │ 
- │     3    Queued       task_3                /tmp                 -         │ 
+ │     Id   Status       Command         Path                       Duration  │ 
+ │>> * 0    Queued       task_0          /tmp                       -         │ 
+ │     1    Queued       task_1          /tmp                       -         │ 
+ │   * 2    Queued       task_2          /tmp                       -         │ 
+ │     3    Queued       task_3          /tmp                       -         │ 
  │                                                                            │ 
  │                                                                            │ 
  │                                                                            │ 
