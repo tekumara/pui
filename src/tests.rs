@@ -635,6 +635,72 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     Ok(())
 }
 
+/// Test that deleting the last task keeps selection on the new last row
+#[tokio::test]
+async fn test_selection_after_deleting_last_task() -> Result<()> {
+    use crate::App;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    for id in 0..3 {
+        let task = Task {
+            id,
+            created_at: now,
+            original_command: format!("task_{id}"),
+            command: format!("task_{id}"),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Queued { enqueued_at: now },
+        };
+        state.tasks.insert(id, task);
+    }
+
+    let mock_client = MockPueueClient {
+        state: state.clone(),
+    };
+    let mut app = App::new(mock_client);
+    app.state = Some(state);
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Select the last row (task 2)
+    app.table_state.select(Some(2));
+    app.update_current_task_id();
+    assert_eq!(app.current_task_id, Some(2));
+
+    // Remove the last task and re-sync selection
+    if let Some(app_state) = app.state.as_mut() {
+        app_state.tasks.remove(&2);
+    }
+    app.update_current_task_id();
+
+    assert_eq!(
+        app.table_state.selected(),
+        Some(1),
+        "Selection should move to the new last row"
+    );
+    assert_eq!(
+        app.current_task_id,
+        Some(1),
+        "Selection should stay on the previous row after deletion"
+    );
+
+    // Ensure draw/sync doesn't reset to the first row
+    terminal.draw(|f| app.draw(f))?;
+    assert_eq!(app.table_state.selected(), Some(1));
+    assert_eq!(app.current_task_id, Some(1));
+
+    Ok(())
+}
+
 /// Test multi-select mode with 2 of 4 items selected
 #[tokio::test]
 async fn test_ui_snapshot_multiselect() -> Result<()> {
