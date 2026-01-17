@@ -1,6 +1,7 @@
 use crate::SortField;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
+use std::collections::HashSet;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -133,6 +134,7 @@ pub struct UiState<'a> {
     pub log_view: Option<(&'a str, u16)>,
     pub connection_error: Option<&'a str>,
     pub error_modal: Option<&'a str>,
+    pub selected_task_ids: &'a HashSet<usize>,
 }
 
 pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
@@ -198,7 +200,15 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                     Style::default().fg(Color::DarkGray)
                 };
 
+                // Selection indicator: * for selected, empty for unselected
+                let indicator = if ui_state.selected_task_ids.contains(&id) {
+                    "*"
+                } else {
+                    " "
+                };
+
                 Row::new(vec![
+                    Cell::from(indicator),
                     Cell::from(ft.id),
                     Cell::from(ft.status),
                     Cell::from(ft.command),
@@ -209,30 +219,30 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             })
             .collect();
 
-        let header = Row::new(vec!["Id", "Status", "Command", "Path", "Duration"]).style(
+        let header = Row::new(vec![" ", "Id", "Status", "Command", "Path", "Duration"]).style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::Cyan),
         );
 
-        let task_table = Table::new(
-            rows,
-            [
-                Constraint::Length(4),
-                Constraint::Length(12),
-                Constraint::Percentage(30),
-                Constraint::Percentage(30),
-                Constraint::Length(10),
-            ],
-        )
-        .header(header)
-        .block(Block::default().borders(Borders::ALL).title(" Tasks "))
-        .row_highlight_style(
-            Style::default()
-                .add_modifier(Modifier::BOLD)
-                .bg(Color::Rgb(50, 50, 50)),
-        )
-        .highlight_symbol(">> ");
+        let widths = [
+            Constraint::Length(1),
+            Constraint::Length(4),
+            Constraint::Length(12),
+            Constraint::Percentage(30),
+            Constraint::Percentage(30),
+            Constraint::Length(10),
+        ];
+
+        let task_table = Table::new(rows, widths)
+            .header(header)
+            .block(Block::default().borders(Borders::ALL).title(" Tasks "))
+            .row_highlight_style(
+                Style::default()
+                    .add_modifier(Modifier::BOLD)
+                    .bg(Color::Rgb(50, 50, 50)),
+            )
+            .highlight_symbol(">> ");
 
         f.render_stateful_widget(task_table, table_area, ui_state.table_state);
 
@@ -350,6 +360,8 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         Line::from(format!("Filter: {}_ (Esc to clear)", ui_state.filter_text))
     } else if !ui_state.filter_text.is_empty() {
         Line::from(format!("Filter: {} (Esc to clear)", ui_state.filter_text))
+    } else if !ui_state.selected_task_ids.is_empty() {
+        Line::from(format!("{} selected (Esc to clear)", ui_state.selected_task_ids.len()))
     } else {
         Line::from("Connected to Pueue daemon")
     };

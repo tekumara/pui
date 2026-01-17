@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, widgets::TableState};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::LogState;
@@ -173,6 +173,7 @@ async fn test_ui_snapshot() -> Result<()> {
             log_view: None,
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -212,6 +213,7 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
             log_view: None,
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -274,6 +276,7 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             log_view: None,
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -314,6 +317,7 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
             log_view: None,
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -350,6 +354,7 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
             log_view: None,
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -389,6 +394,7 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             log_view: Some((logs, scroll_offset)),
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -448,6 +454,7 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -521,6 +528,7 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
             log_view: Some((&log_state.logs, log_state.scroll_offset)),
             connection_error: None,
             error_modal: None,
+            selected_task_ids: &HashSet::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -599,8 +607,8 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
 
     // 1. select a task (Task 1 at row 1 when sorted by ID)
     app.table_state.select(Some(1));
-    app.update_selected_task_id();
-    assert_eq!(app.selected_task_id, Some(1));
+    app.update_current_task_id();
+    assert_eq!(app.current_task_id, Some(1));
 
     // 2. resorts the table so that the selected task ends up in a different row
     app.sort_field = SortField::Command;
@@ -610,7 +618,7 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     terminal.draw(|f| app.draw(f))?;
 
     assert_eq!(
-        app.selected_task_id,
+        app.current_task_id,
         Some(1),
         "Selection should still be Task 1"
     );
@@ -619,6 +627,76 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
         Some(0),
         "Task 1 (aaa) should now be at row 0"
     );
+
+    let ui = buffer_contents(terminal.backend().buffer());
+
+    insta::assert_snapshot!(ui);
+
+    Ok(())
+}
+
+/// Test multi-select mode with 2 of 4 items selected
+#[tokio::test]
+async fn test_ui_snapshot_multiselect() -> Result<()> {
+    // Set TZ to UTC for consistent snapshots across environments
+    unsafe {
+        std::env::set_var("TZ", "UTC");
+    }
+
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    // Create 4 tasks
+    for i in 0..4 {
+        let task = Task {
+            id: i,
+            created_at: now,
+            original_command: format!("task_{}", i),
+            command: format!("task_{}", i),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Queued { enqueued_at: now },
+        };
+        state.tasks.insert(i, task);
+    }
+
+    let mut task_ids: Vec<usize> = state.tasks.keys().cloned().collect();
+    task_ids.sort();
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+
+    let jiff_now = jiff::Timestamp::from_second(now.timestamp()).unwrap();
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    // Select tasks 0 and 2 (2 of 4)
+    let mut selected_task_ids = HashSet::new();
+    selected_task_ids.insert(0);
+    selected_task_ids.insert(2);
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
+            log_view: None,
+            connection_error: None,
+            error_modal: None,
+            selected_task_ids: &selected_task_ids,
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
 
     let ui = buffer_contents(terminal.backend().buffer());
 

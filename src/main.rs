@@ -7,6 +7,7 @@ use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
 use futures::stream::StreamExt;
 use ratatui::{DefaultTerminal, Frame, widgets::TableState};
+use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
 
@@ -61,8 +62,10 @@ pub(crate) struct App<P: PueueClientOps> {
     pub(crate) state: Option<State>,
     /// Table state
     pub(crate) table_state: TableState,
-    /// Selected task ID (to maintain selection across sort changes)
-    pub(crate) selected_task_id: Option<usize>,
+    /// Current task ID (to maintain cursor position across sort changes)
+    pub(crate) current_task_id: Option<usize>,
+    /// Multi-selected task IDs
+    pub(crate) selected_task_ids: HashSet<usize>,
     /// Show details popup
     show_details: bool,
     /// Application mode
@@ -89,7 +92,8 @@ impl<P: PueueClientOps> App<P> {
             tick_rate: Duration::from_millis(250),
             state: None,
             table_state,
-            selected_task_id: None,
+            current_task_id: None,
+            selected_task_ids: HashSet::new(),
             show_details: false,
             app_mode: AppMode::Normal,
             filter_text: String::new(),
@@ -205,7 +209,7 @@ impl<P: PueueClientOps> App<P> {
     pub(crate) fn draw(&mut self, frame: &mut Frame) {
         let task_ids = self.get_sorted_task_ids(&self.filter_text, self.sort_field);
 
-        // Sync table selection with selected_task_id
+        // Sync table selection with current_task_id
         self.sync_selection_with_task_id(&task_ids);
 
         let log_view = if let AppMode::Log(log_state) = &self.app_mode {
@@ -227,41 +231,42 @@ impl<P: PueueClientOps> App<P> {
             log_view,
             connection_error: self.connection_error.as_deref(),
             error_modal: self.error_modal.as_deref(),
+            selected_task_ids: &self.selected_task_ids,
         };
 
         ui::draw(frame, &mut ui_state);
     }
 
-    /// Sync table_state selection with selected_task_id
+    /// Sync table_state selection with current_task_id
     /// This ensures selection follows the task across sort changes
     fn sync_selection_with_task_id(&mut self, task_ids: &[usize]) {
         if task_ids.is_empty() {
             self.table_state.select(None);
-            self.selected_task_id = None;
+            self.current_task_id = None;
             return;
         }
 
         // If we have a selected task ID, find its new row position
-        if let Some(task_id) = self.selected_task_id {
+        if let Some(task_id) = self.current_task_id {
             if let Some(row) = task_ids.iter().position(|&id| id == task_id) {
                 self.table_state.select(Some(row));
             } else {
                 // Task no longer exists (was filtered out or removed), select first
                 self.table_state.select(Some(0));
-                self.selected_task_id = Some(task_ids[0]);
+                self.current_task_id = Some(task_ids[0]);
             }
         } else {
             // No task selected yet, select first task
             self.table_state.select(Some(0));
-            self.selected_task_id = Some(task_ids[0]);
+            self.current_task_id = Some(task_ids[0]);
         }
     }
 
-    /// Update selected_task_id based on current table selection and task list
-    pub(crate) fn update_selected_task_id(&mut self) {
+    /// Update current_task_id based on current table selection and task list
+    pub(crate) fn update_current_task_id(&mut self) {
         let task_ids = self.get_filtered_task_ids();
         if let Some(row) = self.table_state.selected() {
-            self.selected_task_id = task_ids.get(row).copied();
+            self.current_task_id = task_ids.get(row).copied();
         }
     }
 
@@ -341,8 +346,20 @@ impl<P: PueueClientOps> App<P> {
                     match key.code {
                         KeyCode::Char('q') => self.quit(),
                         KeyCode::Esc => {
-                            if !self.filter_text.is_empty() {
+                            if !self.selected_task_ids.is_empty() {
+                                self.selected_task_ids.clear();
+                            } else if !self.filter_text.is_empty() {
                                 self.filter_text.clear();
+                            }
+                        }
+                        KeyCode::Char(' ') => {
+                            // Toggle selection of current task
+                            if let Some(task_id) = self.current_task_id {
+                                if self.selected_task_ids.contains(&task_id) {
+                                    self.selected_task_ids.remove(&task_id);
+                                } else {
+                                    self.selected_task_ids.insert(task_id);
+                                }
                             }
                         }
                         KeyCode::Enter => {
@@ -382,7 +399,7 @@ impl<P: PueueClientOps> App<P> {
                                 _ => 0,
                             };
                             self.table_state.select(Some(i));
-                            self.update_selected_task_id();
+                            self.update_current_task_id();
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
                             let task_ids = self.get_filtered_task_ids();
@@ -398,7 +415,7 @@ impl<P: PueueClientOps> App<P> {
                                 _ => 0,
                             };
                             self.table_state.select(Some(i));
-                            self.update_selected_task_id();
+                            self.update_current_task_id();
                         }
                         KeyCode::PageUp => {
                             let task_ids = self.get_filtered_task_ids();
@@ -413,7 +430,7 @@ impl<P: PueueClientOps> App<P> {
                                     self.table_state
                                         .select(Some(selected.saturating_sub(visible_rows)));
                                 }
-                                self.update_selected_task_id();
+                                self.update_current_task_id();
                             }
                         }
                         KeyCode::PageDown => {
@@ -434,14 +451,14 @@ impl<P: PueueClientOps> App<P> {
                                             .min(task_ids.len().saturating_sub(1)),
                                     ));
                                 }
-                                self.update_selected_task_id();
+                                self.update_current_task_id();
                             }
                         }
                         KeyCode::Home => {
                             let task_ids = self.get_filtered_task_ids();
                             if !task_ids.is_empty() {
                                 self.table_state.select(Some(0));
-                                self.update_selected_task_id();
+                                self.update_current_task_id();
                             }
                         }
                         KeyCode::End => {
@@ -449,7 +466,7 @@ impl<P: PueueClientOps> App<P> {
                             if !task_ids.is_empty() {
                                 self.table_state
                                     .select(Some(task_ids.len().saturating_sub(1)));
-                                self.update_selected_task_id();
+                                self.update_current_task_id();
                             }
                         }
                         KeyCode::Char('f') => {
@@ -459,106 +476,105 @@ impl<P: PueueClientOps> App<P> {
                             self.app_mode = AppMode::Sort;
                         }
                         KeyCode::Char('r') => {
-                            if let Some(i) = self.table_state.selected() {
-                                let task_ids = self.get_filtered_task_ids();
-                                if let Some(id) = task_ids.get(i) {
-                                    let task_id = *id;
-                                    // Check if task is Done (finished/failed) - needs restart instead of start
-                                    let is_done = self
-                                        .state
-                                        .as_ref()
-                                        .and_then(|s| s.tasks.get(&task_id))
-                                        .is_some_and(|t| {
-                                            matches!(t.status, TaskStatus::Done { .. })
-                                        });
+                            let target_ids = self.get_action_target_ids();
+                            if !target_ids.is_empty() {
+                                // Separate tasks into those needing restart vs start
+                                let mut to_start = Vec::new();
+                                let mut to_restart = Vec::new();
 
-                                    let result = if is_done {
-                                        // Restart the finished/failed task
-                                        let task = self
-                                            .state
-                                            .as_ref()
-                                            .unwrap()
-                                            .tasks
-                                            .get(&task_id)
-                                            .unwrap();
-                                        self.pueue_client
-                                            .restart_tasks(vec![TaskToRestart {
-                                                task_id,
-                                                original_command: task.original_command.clone(),
-                                                path: task.path.clone(),
-                                                label: task.label.clone(),
-                                                priority: task.priority,
-                                            }])
-                                            .await
-                                    } else {
-                                        self.pueue_client.start_tasks(vec![task_id]).await
-                                    };
-
-                                    if let Err(e) = result {
-                                        self.error_modal =
-                                            Some(format!("Failed to start task: {}", e));
-                                    } else {
-                                        let _ = self.refresh_state().await;
+                                if let Some(state) = &self.state {
+                                    for task_id in target_ids {
+                                        if let Some(task) = state.tasks.get(&task_id) {
+                                            if matches!(task.status, TaskStatus::Done { .. }) {
+                                                to_restart.push(TaskToRestart {
+                                                    task_id,
+                                                    original_command: task.original_command.clone(),
+                                                    path: task.path.clone(),
+                                                    label: task.label.clone(),
+                                                    priority: task.priority,
+                                                });
+                                            } else {
+                                                to_start.push(task_id);
+                                            }
+                                        }
                                     }
+                                }
+
+                                let mut had_error = false;
+                                if !to_start.is_empty()
+                                    && let Err(e) = self.pueue_client.start_tasks(to_start).await
+                                {
+                                    self.error_modal =
+                                        Some(format!("Failed to start task(s): {}", e));
+                                    had_error = true;
+                                }
+                                if !to_restart.is_empty()
+                                    && !had_error
+                                    && let Err(e) =
+                                        self.pueue_client.restart_tasks(to_restart).await
+                                {
+                                    self.error_modal =
+                                        Some(format!("Failed to restart task(s): {}", e));
+                                    had_error = true;
+                                }
+                                if !had_error {
+                                    let _ = self.refresh_state().await;
                                 }
                             }
                         }
                         KeyCode::Char('p') => {
-                            if let Some(i) = self.table_state.selected() {
-                                let task_ids = self.get_filtered_task_ids();
-                                if let Some(id) = task_ids.get(i) {
-                                    if let Err(e) = self.pueue_client.pause_tasks(vec![*id]).await {
-                                        self.error_modal =
-                                            Some(format!("Failed to pause task: {}", e));
-                                    } else {
-                                        let _ = self.refresh_state().await;
-                                    }
+                            let target_ids = self.get_action_target_ids();
+                            if !target_ids.is_empty() {
+                                if let Err(e) = self.pueue_client.pause_tasks(target_ids).await {
+                                    self.error_modal =
+                                        Some(format!("Failed to pause task(s): {}", e));
+                                } else {
+                                    let _ = self.refresh_state().await;
                                 }
                             }
                         }
                         KeyCode::Char('x') => {
-                            if let Some(i) = self.table_state.selected() {
-                                let task_ids = self.get_filtered_task_ids();
-                                if let Some(id) = task_ids.get(i) {
-                                    if let Err(e) = self.pueue_client.kill_tasks(vec![*id]).await {
-                                        self.error_modal =
-                                            Some(format!("Failed to kill task: {}", e));
-                                    } else {
-                                        let _ = self.refresh_state().await;
-                                    }
+                            let target_ids = self.get_action_target_ids();
+                            if !target_ids.is_empty() {
+                                if let Err(e) = self.pueue_client.kill_tasks(target_ids).await {
+                                    self.error_modal =
+                                        Some(format!("Failed to kill task(s): {}", e));
+                                } else {
+                                    let _ = self.refresh_state().await;
                                 }
                             }
                         }
                         KeyCode::Backspace => {
-                            if let Some(i) = self.table_state.selected() {
-                                let task_ids = self.get_filtered_task_ids();
-                                if let Some(id) = task_ids.get(i) {
-                                    let task_id = *id;
-                                    // Don't remove running or paused tasks
-                                    let is_active = self
-                                        .state
-                                        .as_ref()
-                                        .and_then(|s| s.tasks.get(&task_id))
-                                        .is_some_and(|t| {
-                                            matches!(
-                                                t.status,
-                                                TaskStatus::Running { .. }
-                                                    | TaskStatus::Paused { .. }
-                                            )
-                                        });
+                            let target_ids = self.get_action_target_ids();
+                            if !target_ids.is_empty() {
+                                // Filter out active (running/paused) tasks
+                                let removable: Vec<usize> = target_ids
+                                    .into_iter()
+                                    .filter(|task_id| {
+                                        !self
+                                            .state
+                                            .as_ref()
+                                            .and_then(|s| s.tasks.get(task_id))
+                                            .is_some_and(|t| {
+                                                matches!(
+                                                    t.status,
+                                                    TaskStatus::Running { .. }
+                                                        | TaskStatus::Paused { .. }
+                                                )
+                                            })
+                                    })
+                                    .collect();
 
-                                    if !is_active {
-                                        if let Err(e) =
-                                            self.pueue_client.remove_tasks(vec![task_id]).await
-                                        {
-                                            self.error_modal =
-                                                Some(format!("Failed to remove task: {}", e));
-                                        } else {
-                                            let _ = self.refresh_state().await;
-                                            let next_index = if i > 0 { i - 1 } else { 0 };
-                                            self.table_state.select(Some(next_index));
-                                            self.update_selected_task_id();
-                                        }
+                                if !removable.is_empty() {
+                                    if let Err(e) =
+                                        self.pueue_client.remove_tasks(removable).await
+                                    {
+                                        self.error_modal =
+                                            Some(format!("Failed to remove task(s): {}", e));
+                                    } else {
+                                        self.selected_task_ids.clear();
+                                        let _ = self.refresh_state().await;
+                                        self.update_current_task_id();
                                     }
                                 }
                             }
@@ -579,6 +595,15 @@ impl<P: PueueClientOps> App<P> {
     /// Get filtered and sorted task IDs
     fn get_filtered_task_ids(&self) -> Vec<usize> {
         self.get_sorted_task_ids(&self.filter_text, self.sort_field)
+    }
+
+    /// Get target task IDs for actions (multi-select or current task)
+    fn get_action_target_ids(&self) -> Vec<usize> {
+        if self.selected_task_ids.is_empty() {
+            self.current_task_id.into_iter().collect()
+        } else {
+            self.selected_task_ids.iter().copied().collect()
+        }
     }
 
     /// Get task IDs filtered by the given filter text and sorted by the given field

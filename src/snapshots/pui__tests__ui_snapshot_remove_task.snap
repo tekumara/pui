@@ -7,9 +7,9 @@ expression: ui
  │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │   Id   Status       Command                Path                  Duration  │ 
- │>> 0    Running      sleep 60               /tmp                  0s        │ 
- │   2    Failed (1)   false                  /tmp                  0s        │ 
+ │     Id   Status       Command               Path                 Duration  │ 
+ │>>   0    Running      sleep 60              /tmp                 0s        │ 
+ │     2    Failed (1)   false                 /tmp                 0s        │ 
  │                                                                            │ 
  │                                                                            │ 
  │                                                                            │ 
