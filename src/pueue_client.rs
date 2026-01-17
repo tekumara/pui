@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
-use pueue_lib::message::*;
-use pueue_lib::settings::Settings;
-use pueue_lib::state::State;
+use anyhow::{Result, anyhow};
 use pueue_lib::Client;
+use pueue_lib::message::*;
 use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
+use pueue_lib::settings::Settings;
+use pueue_lib::state::State;
 use pueue_lib::tls::load_certificate;
 
 pub trait PueueClientOps {
@@ -58,78 +58,137 @@ impl PueueClient {
 
 impl PueueClientOps for PueueClient {
     async fn get_state(&mut self) -> Result<State> {
-        self.client.send_request(Request::Status).await.map_err(|e| anyhow!("{:?}", e))?;
-        let response = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Status)
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let response = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
 
         if let Response::Status(state) = response {
             Ok(*state)
         } else {
-            Err(anyhow!("Unexpected response from pueue daemon: {:?}", response))
+            Err(anyhow!(
+                "Unexpected response from pueue daemon: {:?}",
+                response
+            ))
         }
     }
 
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
-        self.client.send_request(Request::Start(StartRequest {
-            tasks: TaskSelection::TaskIds(ids),
-        })).await.map_err(|e| anyhow!("{:?}", e))?;
-        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Start(StartRequest {
+                tasks: TaskSelection::TaskIds(ids),
+            }))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
     }
 
     async fn restart_tasks(&mut self, tasks: Vec<TaskToRestart>) -> Result<()> {
-        self.client.send_request(Request::Restart(RestartRequest {
-            tasks,
-            start_immediately: true,
-            stashed: false,
-        })).await.map_err(|e| anyhow!("{:?}", e))?;
-        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Restart(RestartRequest {
+                tasks,
+                start_immediately: true,
+                stashed: false,
+            }))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
     }
 
     async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
-        self.client.send_request(Request::Pause(PauseRequest {
-            tasks: TaskSelection::TaskIds(ids),
-            wait: false,
-        })).await.map_err(|e| anyhow!("{:?}", e))?;
-        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Pause(PauseRequest {
+                tasks: TaskSelection::TaskIds(ids),
+                wait: false,
+            }))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
     }
 
     async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
-        self.client.send_request(Request::Kill(KillRequest {
-            tasks: TaskSelection::TaskIds(ids),
-            signal: None,
-        })).await.map_err(|e| anyhow!("{:?}", e))?;
-        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Kill(KillRequest {
+                tasks: TaskSelection::TaskIds(ids),
+                signal: None,
+            }))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
     }
 
     async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
-        self.client.send_request(Request::Remove(ids)).await.map_err(|e| anyhow!("{:?}", e))?;
-        let _ = self.client.receive_response().await.map_err(|e| anyhow!("{:?}", e))?;
+        self.client
+            .send_request(Request::Remove(ids))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
         Ok(())
     }
 
     async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String> {
-        self.client.send_request(Request::Stream(StreamRequest {
-            tasks: TaskSelection::TaskIds(vec![id]),
-            lines,
-        })).await.map_err(|e| anyhow!("Failed to send stream request: {:?}", e))?;
+        self.client
+            .send_request(Request::Stream(StreamRequest {
+                tasks: TaskSelection::TaskIds(vec![id]),
+                lines,
+            }))
+            .await
+            .map_err(|e| anyhow!("Failed to send stream request: {:?}", e))?;
 
         // First response contains the initial log content
-        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive stream response: {:?}", e))?;
+        let response = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("Failed to receive stream response: {:?}", e))?;
 
         match response {
             Response::Stream(stream_response) => {
                 Ok(stream_response.logs.get(&id).cloned().unwrap_or_default())
             }
             Response::Failure(msg) => Err(anyhow!("Stream request failed: {}", msg)),
-            _ => Err(anyhow!("Unexpected response from pueue daemon: {:?}", response)),
+            _ => Err(anyhow!(
+                "Unexpected response from pueue daemon: {:?}",
+                response
+            )),
         }
     }
 
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
-        let response = self.client.receive_response().await.map_err(|e| anyhow!("Failed to receive stream chunk: {:?}", e))?;
+        let response = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("Failed to receive stream chunk: {:?}", e))?;
 
         match response {
             Response::Stream(stream_response) => {
@@ -139,7 +198,10 @@ impl PueueClientOps for PueueClient {
             }
             Response::Close => Ok(None),
             Response::Failure(msg) => Err(anyhow!("Stream failed: {}", msg)),
-            _ => Err(anyhow!("Unexpected response during streaming: {:?}", response)),
+            _ => Err(anyhow!(
+                "Unexpected response during streaming: {:?}",
+                response
+            )),
         }
     }
 

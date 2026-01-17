@@ -1,6 +1,6 @@
 ---
 source: src/tests.rs
-expression: buffer_string
+expression: buffer_contents(terminal.backend().buffer())
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
