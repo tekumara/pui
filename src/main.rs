@@ -53,8 +53,6 @@ enum AppMode {
 pub(crate) struct App<P: PueueClientOps> {
     /// Is the application running?
     running: bool,
-    /// Event stream
-    event_stream: EventStream,
     /// Pueue client
     pueue_client: P,
     /// Tick rate
@@ -87,7 +85,6 @@ impl<P: PueueClientOps> App<P> {
 
         Self {
             running: false,
-            event_stream: EventStream::new(),
             pueue_client,
             tick_rate: Duration::from_millis(250),
             state: None,
@@ -107,6 +104,7 @@ impl<P: PueueClientOps> App<P> {
         self.running = true;
         let mut tick_interval = tokio::time::interval(self.tick_rate);
         tick_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        let mut event_stream = EventStream::new();
 
         while self.running {
             // Draw the UI
@@ -115,7 +113,7 @@ impl<P: PueueClientOps> App<P> {
             tokio::select! {
 
                 // Handle keyboard/terminal events
-                event = self.event_stream.next() => {
+                event = event_stream.next() => {
                     if let Some(Ok(evt)) = event {
                         match evt {
                             Event::Key(key) if key.kind == KeyEventKind::Press => {
