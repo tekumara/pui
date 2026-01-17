@@ -62,7 +62,7 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
         let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
         let end_ts = end
             .map(|e| jiff::Timestamp::from_second(e.timestamp()).unwrap())
-            .unwrap_or_else(|| now.clone());
+            .unwrap_or_else(|| *now);
         let duration = end_ts.duration_since(start_ts);
 
         if duration.as_secs() < 60 {
