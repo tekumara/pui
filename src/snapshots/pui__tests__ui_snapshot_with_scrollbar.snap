@@ -7,20 +7,20 @@ expression: ui
  │j/k/PgUp/PgDn/Home/End: Nav | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────↑ 
- │   Id   Status       Command                Path                  Duration  ║ 
- │   7    Queued       sleep 7                /tmp                  -         ║ 
- │   8    Queued       sleep 8                /tmp                  -         ║ 
- │   9    Queued       sleep 9                /tmp                  -         ║ 
- │   10   Queued       sleep 10               /tmp                  -         ║ 
- │   11   Queued       sleep 11               /tmp                  -         ║ 
- │   12   Queued       sleep 12               /tmp                  -         ║ 
- │   13   Queued       sleep 13               /tmp                  -         ║ 
- │   14   Queued       sleep 14               /tmp                  -         █ 
- │   15   Queued       sleep 15               /tmp                  -         █ 
- │   16   Queued       sleep 16               /tmp                  -         █ 
- │   17   Queued       sleep 17               /tmp                  -         █ 
- │   18   Queued       sleep 18               /tmp                  -         █ 
- │>> 19   Queued       sleep 19               /tmp                  -         █ 
+ │     Id   Status       Command               Path                 Duration  ║ 
+ │     7    Queued       sleep 7               /tmp                 -         ║ 
+ │     8    Queued       sleep 8               /tmp                 -         ║ 
+ │     9    Queued       sleep 9               /tmp                 -         ║ 
+ │     10   Queued       sleep 10              /tmp                 -         ║ 
+ │     11   Queued       sleep 11              /tmp                 -         ║ 
+ │     12   Queued       sleep 12              /tmp                 -         ║ 
+ │     13   Queued       sleep 13              /tmp                 -         ║ 
+ │     14   Queued       sleep 14              /tmp                 -         █ 
+ │     15   Queued       sleep 15              /tmp                 -         █ 
+ │     16   Queued       sleep 16              /tmp                 -         █ 
+ │     17   Queued       sleep 17              /tmp                 -         █ 
+ │     18   Queued       sleep 18              /tmp                 -         █ 
+ │>>   19   Queued       sleep 19              /tmp                 -         █ 
  └────────────────────────────────────────────────────────────────────────────↓ 
  ┌────────────────────────────────────────────────────────────────────────────┐ 
  │Connected to Pueue daemon                                                   │ 
