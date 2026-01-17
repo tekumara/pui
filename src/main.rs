@@ -265,8 +265,26 @@ impl<P: PueueClientOps> App<P> {
     /// Update current_task_id based on current table selection and task list
     pub(crate) fn update_current_task_id(&mut self) {
         let task_ids = self.get_filtered_task_ids();
+        if task_ids.is_empty() {
+            // No tasks means no valid selection or current task.
+            self.table_state.select(None);
+            self.current_task_id = None;
+            return;
+        }
+
         if let Some(row) = self.table_state.selected() {
-            self.current_task_id = task_ids.get(row).copied();
+            // If the selected row is now past the end (e.g., last task was deleted),
+            // clamp to the new last row so we don't jump to the first item 
+            let last_index = task_ids.len().saturating_sub(1);
+            let clamped_row = row.min(last_index);
+            if clamped_row != row {
+                self.table_state.select(Some(clamped_row));
+            }
+            self.current_task_id = task_ids.get(clamped_row).copied();
+        } else {
+            // No row selected yet; default to the first task.
+            self.table_state.select(Some(0));
+            self.current_task_id = task_ids.get(0).copied();
         }
     }
 
