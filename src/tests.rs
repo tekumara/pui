@@ -1,9 +1,9 @@
 use anyhow::Result;
 use chrono::{Local, TimeZone};
-use crossterm::event::{EventStream, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use ratatui::{Terminal, backend::TestBackend, widgets::TableState};
+use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, widgets::TableState};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -144,6 +144,15 @@ async fn setup_test_ui() -> Result<(State, Vec<usize>, Terminal<TestBackend>, ji
     Ok((state, task_ids, terminal, jiff_now))
 }
 
+fn buffer_contents(buffer: &Buffer) -> String {
+    buffer
+        .content
+        .chunks(buffer.area.width as usize)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 #[tokio::test]
 async fn test_ui_snapshot() -> Result<()> {
     let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
@@ -168,15 +177,9 @@ async fn test_ui_snapshot() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -213,15 +216,9 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -281,15 +278,9 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -327,15 +318,9 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -369,15 +354,9 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -414,15 +393,9 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -479,15 +452,9 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    let buffer_lines: Vec<&str> = buffer_string.lines().collect();
+    let buffer_lines: Vec<&str> = ui.lines().collect();
     let last_content_line = buffer_lines
         .iter()
         .rev()
@@ -501,7 +468,7 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
         last_content_line
     );
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -518,11 +485,7 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
     table_state.select(Some(0));
 
     let mut log_state = LogState::new(0);
-    log_state.logs = [
-        "AA",
-        "ZZ",
-    ]
-    .join("\n");
+    log_state.logs = ["AA", "ZZ"].join("\n");
 
     // Borders take 2 lines => 2 lines of content visible and 40 columns of content width for wrapping.
     let page_height = 4 - 2;
@@ -537,7 +500,11 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
     log_state.update_autoscroll(page_height, page_width);
 
     // One line beyond end
-    log_state.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), page_height, page_width);
+    log_state.handle_key(
+        KeyEvent::new(KeyCode::Down, KeyModifiers::NONE),
+        page_height,
+        page_width,
+    );
     log_state.update_autoscroll(page_height, page_width);
 
     terminal.draw(|f| {
@@ -558,16 +525,10 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
         ui::draw(f, &mut ui_state);
     })?;
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
     // Verify clamping: "ZZ" should remain on the last visible content line.
-    let buffer_lines: Vec<&str> = buffer_string.lines().collect();
+    let buffer_lines: Vec<&str> = ui.lines().collect();
     let content_lines: Vec<&&str> = buffer_lines
         .iter()
         .filter(|line| line.starts_with('│') && line.ends_with('│'))
@@ -578,7 +539,7 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
         content_lines[1]
     );
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }
@@ -587,8 +548,8 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
 #[tokio::test]
 async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     use crate::App;
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     // Create a state with tasks that will reorder when sorted differently
     let mut state = State::default();
@@ -627,7 +588,9 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     state.tasks.insert(0, task0);
     state.tasks.insert(1, task1);
 
-    let mock_client = MockPueueClient { state: state.clone() };
+    let mock_client = MockPueueClient {
+        state: state.clone(),
+    };
     let mut app = App::new(mock_client);
     app.state = Some(state);
 
@@ -646,18 +609,20 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     // This triggers the sync logic via redraw
     terminal.draw(|f| app.draw(f))?;
 
-    assert_eq!(app.selected_task_id, Some(1), "Selection should still be Task 1");
-    assert_eq!(app.table_state.selected(), Some(0), "Task 1 (aaa) should now be at row 0");
+    assert_eq!(
+        app.selected_task_id,
+        Some(1),
+        "Selection should still be Task 1"
+    );
+    assert_eq!(
+        app.table_state.selected(),
+        Some(0),
+        "Task 1 (aaa) should now be at row 0"
+    );
 
-    let buffer = terminal.backend().buffer();
-    let buffer_string = buffer
-        .content
-        .chunks(buffer.area.width as usize)
-        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
-        .collect::<Vec<_>>()
-        .join("\n");
+    let ui = buffer_contents(terminal.backend().buffer());
 
-    insta::assert_snapshot!(buffer_string);
+    insta::assert_snapshot!(ui);
 
     Ok(())
 }

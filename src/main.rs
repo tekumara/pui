@@ -1,15 +1,12 @@
 mod pueue_client;
-mod ui;
 #[cfg(test)]
 mod tests;
+mod ui;
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
 use futures::stream::StreamExt;
-use ratatui::{
-    widgets::TableState,
-    DefaultTerminal, Frame,
-};
+use ratatui::{DefaultTerminal, Frame, widgets::TableState};
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
 
@@ -275,49 +272,45 @@ impl<P: PueueClientOps> App<P> {
         let mut next_mode = None;
 
         match &mut self.app_mode {
-            AppMode::Filter => {
-                match key.code {
-                    KeyCode::Esc => {
-                        next_mode = Some(AppMode::Normal);
-                        self.filter_text.clear();
-                    }
-                    KeyCode::Enter => {
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Backspace => {
-                        self.filter_text.pop();
-                    }
-                    KeyCode::Char(c) => {
-                        self.filter_text.push(c);
-                    }
-                    _ => {}
+            AppMode::Filter => match key.code {
+                KeyCode::Esc => {
+                    next_mode = Some(AppMode::Normal);
+                    self.filter_text.clear();
                 }
-            }
-            AppMode::Sort => {
-                match key.code {
-                    KeyCode::Esc => {
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Char('i') => {
-                        self.sort_field = SortField::Id;
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Char('s') => {
-                        self.sort_field = SortField::Status;
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Char('c') => {
-                        self.sort_field = SortField::Command;
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Char('p') => {
-                        self.sort_field = SortField::Path;
-                        next_mode = Some(AppMode::Normal);
-                    }
-                    KeyCode::Char('q') => self.quit(),
-                    _ => {}
+                KeyCode::Enter => {
+                    next_mode = Some(AppMode::Normal);
                 }
-            }
+                KeyCode::Backspace => {
+                    self.filter_text.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.filter_text.push(c);
+                }
+                _ => {}
+            },
+            AppMode::Sort => match key.code {
+                KeyCode::Esc => {
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('i') => {
+                    self.sort_field = SortField::Id;
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('s') => {
+                    self.sort_field = SortField::Status;
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('c') => {
+                    self.sort_field = SortField::Command;
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('p') => {
+                    self.sort_field = SortField::Path;
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('q') => self.quit(),
+                _ => {}
+            },
             AppMode::Log(log_state) => {
                 let terminal_size = crossterm::terminal::size()?;
                 let page_height = terminal_size.1.saturating_sub(2);
@@ -365,7 +358,8 @@ impl<P: PueueClientOps> App<P> {
                                             next_mode = Some(AppMode::Log(log_state));
                                         }
                                         Err(e) => {
-                                            self.error_modal = Some(format!("Failed to start log stream: {}", e));
+                                            self.error_modal =
+                                                Some(format!("Failed to start log stream: {}", e));
                                         }
                                     }
                                 }
@@ -418,7 +412,8 @@ impl<P: PueueClientOps> App<P> {
                                 } else {
                                     let terminal_size = crossterm::terminal::size()?;
                                     let visible_rows = terminal_size.1.saturating_sub(11) as usize;
-                                    self.table_state.select(Some(selected.saturating_sub(visible_rows)));
+                                    self.table_state
+                                        .select(Some(selected.saturating_sub(visible_rows)));
                                 }
                                 self.update_selected_task_id();
                             }
@@ -429,12 +424,17 @@ impl<P: PueueClientOps> App<P> {
                                 let terminal_size = crossterm::terminal::size()?;
                                 let visible_rows = terminal_size.1.saturating_sub(11) as usize;
                                 let offset = self.table_state.offset();
-                                let bottom = (offset + visible_rows).saturating_sub(1).min(task_ids.len().saturating_sub(1));
+                                let bottom = (offset + visible_rows)
+                                    .saturating_sub(1)
+                                    .min(task_ids.len().saturating_sub(1));
                                 let selected = self.table_state.selected().unwrap_or(0);
                                 if selected < bottom {
                                     self.table_state.select(Some(bottom));
                                 } else {
-                                    self.table_state.select(Some((selected + visible_rows).min(task_ids.len().saturating_sub(1))));
+                                    self.table_state.select(Some(
+                                        (selected + visible_rows)
+                                            .min(task_ids.len().saturating_sub(1)),
+                                    ));
                                 }
                                 self.update_selected_task_id();
                             }
@@ -449,7 +449,8 @@ impl<P: PueueClientOps> App<P> {
                         KeyCode::End => {
                             let task_ids = self.get_filtered_task_ids();
                             if !task_ids.is_empty() {
-                                self.table_state.select(Some(task_ids.len().saturating_sub(1)));
+                                self.table_state
+                                    .select(Some(task_ids.len().saturating_sub(1)));
                                 self.update_selected_task_id();
                             }
                         }
@@ -465,26 +466,39 @@ impl<P: PueueClientOps> App<P> {
                                 if let Some(id) = task_ids.get(i) {
                                     let task_id = *id;
                                     // Check if task is Done (finished/failed) - needs restart instead of start
-                                    let is_done = self.state.as_ref()
+                                    let is_done = self
+                                        .state
+                                        .as_ref()
                                         .and_then(|s| s.tasks.get(&task_id))
-                                        .is_some_and(|t| matches!(t.status, TaskStatus::Done { .. }));
+                                        .is_some_and(|t| {
+                                            matches!(t.status, TaskStatus::Done { .. })
+                                        });
 
                                     let result = if is_done {
                                         // Restart the finished/failed task
-                                        let task = self.state.as_ref().unwrap().tasks.get(&task_id).unwrap();
-                                        self.pueue_client.restart_tasks(vec![TaskToRestart {
-                                            task_id,
-                                            original_command: task.original_command.clone(),
-                                            path: task.path.clone(),
-                                            label: task.label.clone(),
-                                            priority: task.priority,
-                                        }]).await
+                                        let task = self
+                                            .state
+                                            .as_ref()
+                                            .unwrap()
+                                            .tasks
+                                            .get(&task_id)
+                                            .unwrap();
+                                        self.pueue_client
+                                            .restart_tasks(vec![TaskToRestart {
+                                                task_id,
+                                                original_command: task.original_command.clone(),
+                                                path: task.path.clone(),
+                                                label: task.label.clone(),
+                                                priority: task.priority,
+                                            }])
+                                            .await
                                     } else {
                                         self.pueue_client.start_tasks(vec![task_id]).await
                                     };
 
                                     if let Err(e) = result {
-                                        self.error_modal = Some(format!("Failed to start task: {}", e));
+                                        self.error_modal =
+                                            Some(format!("Failed to start task: {}", e));
                                     } else {
                                         let _ = self.refresh_state().await;
                                     }
@@ -496,7 +510,8 @@ impl<P: PueueClientOps> App<P> {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     if let Err(e) = self.pueue_client.pause_tasks(vec![*id]).await {
-                                        self.error_modal = Some(format!("Failed to pause task: {}", e));
+                                        self.error_modal =
+                                            Some(format!("Failed to pause task: {}", e));
                                     } else {
                                         let _ = self.refresh_state().await;
                                     }
@@ -508,7 +523,8 @@ impl<P: PueueClientOps> App<P> {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     if let Err(e) = self.pueue_client.kill_tasks(vec![*id]).await {
-                                        self.error_modal = Some(format!("Failed to kill task: {}", e));
+                                        self.error_modal =
+                                            Some(format!("Failed to kill task: {}", e));
                                     } else {
                                         let _ = self.refresh_state().await;
                                     }
@@ -521,13 +537,24 @@ impl<P: PueueClientOps> App<P> {
                                 if let Some(id) = task_ids.get(i) {
                                     let task_id = *id;
                                     // Don't remove running or paused tasks
-                                    let is_active = self.state.as_ref()
+                                    let is_active = self
+                                        .state
+                                        .as_ref()
                                         .and_then(|s| s.tasks.get(&task_id))
-                                        .is_some_and(|t| matches!(t.status, TaskStatus::Running { .. } | TaskStatus::Paused { .. }));
+                                        .is_some_and(|t| {
+                                            matches!(
+                                                t.status,
+                                                TaskStatus::Running { .. }
+                                                    | TaskStatus::Paused { .. }
+                                            )
+                                        });
 
                                     if !is_active {
-                                        if let Err(e) = self.pueue_client.remove_tasks(vec![task_id]).await {
-                                            self.error_modal = Some(format!("Failed to remove task: {}", e));
+                                        if let Err(e) =
+                                            self.pueue_client.remove_tasks(vec![task_id]).await
+                                        {
+                                            self.error_modal =
+                                                Some(format!("Failed to remove task: {}", e));
                                         } else {
                                             let _ = self.refresh_state().await;
                                             let next_index = if i > 0 { i - 1 } else { 0 };
@@ -546,10 +573,10 @@ impl<P: PueueClientOps> App<P> {
 
         if let Some(mode) = next_mode {
             self.app_mode = mode;
-    }
+        }
 
-    Ok(())
-}
+        Ok(())
+    }
 
     /// Get filtered and sorted task IDs
     fn get_filtered_task_ids(&self) -> Vec<usize> {
@@ -558,10 +585,13 @@ impl<P: PueueClientOps> App<P> {
 
     /// Get task IDs filtered by the given filter text and sorted by the given field
     fn get_sorted_task_ids(&self, filter_text: &str, sort_field: SortField) -> Vec<usize> {
-        self.state.as_ref()
+        self.state
+            .as_ref()
             .map(|s| {
                 let now = jiff::Timestamp::now();
-                let mut ids: Vec<usize> = s.tasks.iter()
+                let mut ids: Vec<usize> = s
+                    .tasks
+                    .iter()
                     .filter(|(id, task)| {
                         ui::format_task(**id, task, &now).matches_filter(filter_text)
                     })
@@ -573,22 +603,18 @@ impl<P: PueueClientOps> App<P> {
                     let task_a = s.tasks.get(a);
                     let task_b = s.tasks.get(b);
                     match (task_a, task_b) {
-                        (Some(ta), Some(tb)) => {
-                            match sort_field {
-                                SortField::Id => a.cmp(b),
-                                SortField::Status => {
-                                    let sa = ui::status_display(&ta.status);
-                                    let sb = ui::status_display(&tb.status);
-                                    sa.cmp(&sb).then_with(|| a.cmp(b))
-                                }
-                                SortField::Command => {
-                                    ta.command.cmp(&tb.command).then_with(|| a.cmp(b))
-                                }
-                                SortField::Path => {
-                                    ta.path.cmp(&tb.path).then_with(|| a.cmp(b))
-                                }
+                        (Some(ta), Some(tb)) => match sort_field {
+                            SortField::Id => a.cmp(b),
+                            SortField::Status => {
+                                let sa = ui::status_display(&ta.status);
+                                let sb = ui::status_display(&tb.status);
+                                sa.cmp(&sb).then_with(|| a.cmp(b))
                             }
-                        }
+                            SortField::Command => {
+                                ta.command.cmp(&tb.command).then_with(|| a.cmp(b))
+                            }
+                            SortField::Path => ta.path.cmp(&tb.path).then_with(|| a.cmp(b)),
+                        },
                         _ => a.cmp(b),
                     }
                 });
@@ -649,7 +675,10 @@ impl std::fmt::Debug for LogState {
             .field("logs", &format!("({} bytes)", self.logs.len()))
             .field("scroll_offset", &self.scroll_offset)
             .field("autoscroll", &self.autoscroll)
-            .field("stream_client", &self.stream_client.as_ref().map(|_| "Some(...)"))
+            .field(
+                "stream_client",
+                &self.stream_client.as_ref().map(|_| "Some(...)"),
+            )
             .finish()
     }
 }
@@ -665,7 +694,7 @@ impl LogState {
         }
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent, page_height: u16, page_width: u16) -> bool {
+    pub(crate) fn handle_key(&mut self, key: KeyEvent, page_height: u16, page_width: u16) -> bool {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.scroll_offset = self.scroll_offset.saturating_add(1);
@@ -704,7 +733,9 @@ impl LogState {
 
         // Clamp manual scrolling to the last possible offset, so we can't overscroll into blank space.
         if !self.autoscroll {
-            let max_offset = self.visual_line_count(page_width).saturating_sub(page_height);
+            let max_offset = self
+                .visual_line_count(page_width)
+                .saturating_sub(page_height);
             self.scroll_offset = self.scroll_offset.min(max_offset);
         }
         true
@@ -721,11 +752,10 @@ impl LogState {
         p.line_count(width) as u16
     }
 
-    pub fn update_autoscroll(&mut self, page_height: u16, page_width: u16) {
+    pub(crate) fn update_autoscroll(&mut self, page_height: u16, page_width: u16) {
         if self.autoscroll {
             let lines = self.visual_line_count(page_width);
             self.scroll_offset = lines.saturating_sub(page_height);
         }
     }
 }
-

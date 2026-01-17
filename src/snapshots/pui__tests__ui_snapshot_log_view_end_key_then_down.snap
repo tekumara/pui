@@ -1,6 +1,6 @@
 ---
 source: src/tests.rs
-expression: buffer_string
+expression: ui
 ---
 ┌ Task Log (Esc to close) ───────────────┐
 │AA                                      │

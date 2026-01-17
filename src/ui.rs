@@ -1,14 +1,17 @@
+use crate::SortField;
+use pueue_lib::state::State;
+use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap},
-    Frame,
+    widgets::{
+        Block, Borders, Cell, Clear, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table, TableState, Wrap,
+    },
 };
 use std::path::Path;
-use pueue_lib::state::State;
-use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use crate::SortField;
 
 pub fn status_display(status: &TaskStatus) -> String {
     match status {
@@ -57,7 +60,9 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
     let (start, end) = task.start_and_end();
     let duration_str = if let Some(start) = start {
         let start_ts = jiff::Timestamp::from_second(start.timestamp()).unwrap();
-        let end_ts = end.map(|e| jiff::Timestamp::from_second(e.timestamp()).unwrap()).unwrap_or_else(|| now.clone());
+        let end_ts = end
+            .map(|e| jiff::Timestamp::from_second(e.timestamp()).unwrap())
+            .unwrap_or_else(|| now.clone());
         let duration = end_ts.duration_since(start_ts);
 
         if duration.as_secs() < 60 {
@@ -65,7 +70,11 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
         } else if duration.as_secs() < 3600 {
             format!("{}m {}s", duration.as_secs() / 60, duration.as_secs() % 60)
         } else {
-            format!("{}h {}m", duration.as_secs() / 3600, (duration.as_secs() % 3600) / 60)
+            format!(
+                "{}h {}m",
+                duration.as_secs() / 3600,
+                (duration.as_secs() % 3600) / 60
+            )
         }
     } else {
         "-".to_string()
@@ -147,11 +156,14 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(3),
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ]
+            .as_ref(),
+        )
         .split(f.area());
 
     let title_block = Block::default()
@@ -165,44 +177,61 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let table_area = chunks[1];
 
     if let Some(s) = &ui_state.state {
-        let rows: Vec<Row> = ui_state.task_ids.iter().filter_map(|id| {
-            s.tasks.get(id).map(|task| (*id, task))
-        }).map(|(id, task)| {
-            let ft = format_task(id, task, &ui_state.now);
-            let style = if ft.status == "Running" || ft.status == "Success" {
-                Style::default().fg(Color::Green)
-            } else if ft.status.starts_with("Failed") || ft.status == "Errored" || ft.status == "Killed" {
-                Style::default().fg(Color::Red)
-            } else if ft.status == "Queued" {
-                Style::default().fg(Color::Yellow)
-            } else if ft.status == "Paused" {
-                Style::default().fg(Color::Blue)
-            } else {
-                Style::default().fg(Color::DarkGray)
-            };
+        let rows: Vec<Row> = ui_state
+            .task_ids
+            .iter()
+            .filter_map(|id| s.tasks.get(id).map(|task| (*id, task)))
+            .map(|(id, task)| {
+                let ft = format_task(id, task, &ui_state.now);
+                let style = if ft.status == "Running" || ft.status == "Success" {
+                    Style::default().fg(Color::Green)
+                } else if ft.status.starts_with("Failed")
+                    || ft.status == "Errored"
+                    || ft.status == "Killed"
+                {
+                    Style::default().fg(Color::Red)
+                } else if ft.status == "Queued" {
+                    Style::default().fg(Color::Yellow)
+                } else if ft.status == "Paused" {
+                    Style::default().fg(Color::Blue)
+                } else {
+                    Style::default().fg(Color::DarkGray)
+                };
 
-            Row::new(vec![
-                Cell::from(ft.id),
-                Cell::from(ft.status),
-                Cell::from(ft.command),
-                Cell::from(ft.path),
-                Cell::from(ft.duration),
-            ]).style(style)
-        }).collect();
+                Row::new(vec![
+                    Cell::from(ft.id),
+                    Cell::from(ft.status),
+                    Cell::from(ft.command),
+                    Cell::from(ft.path),
+                    Cell::from(ft.duration),
+                ])
+                .style(style)
+            })
+            .collect();
 
-        let header = Row::new(vec!["Id", "Status", "Command", "Path", "Duration"])
-            .style(Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan));
+        let header = Row::new(vec!["Id", "Status", "Command", "Path", "Duration"]).style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::Cyan),
+        );
 
-        let task_table = Table::new(rows, [
-            Constraint::Length(4),
-            Constraint::Length(12),
-            Constraint::Percentage(30),
-            Constraint::Percentage(30),
-            Constraint::Length(10),
-        ])
+        let task_table = Table::new(
+            rows,
+            [
+                Constraint::Length(4),
+                Constraint::Length(12),
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+                Constraint::Length(10),
+            ],
+        )
         .header(header)
         .block(Block::default().borders(Borders::ALL).title(" Tasks "))
-        .row_highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Rgb(50, 50, 50)))
+        .row_highlight_style(
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .bg(Color::Rgb(50, 50, 50)),
+        )
         .highlight_symbol(">> ");
 
         f.render_stateful_widget(task_table, table_area, ui_state.table_state);
@@ -217,16 +246,14 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                 .viewport_content_length(visible_rows)
                 .position(ui_state.table_state.selected().unwrap_or(0));
 
-            f.render_stateful_widget(
-                scrollbar,
-                table_area,
-                &mut scrollbar_state,
-            );
+            f.render_stateful_widget(scrollbar, table_area, &mut scrollbar_state);
         }
 
         // Task Details Popup
         if ui_state.show_details {
-            let selected_id = ui_state.table_state.selected()
+            let selected_id = ui_state
+                .table_state
+                .selected()
                 .and_then(|i| ui_state.task_ids.get(i));
 
             let details_text = if let Some(id) = selected_id {
@@ -240,7 +267,10 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                     if let Some(label) = ft.label {
                         details.push_str(&format!("Label: {}\n", label));
                     }
-                    details.push_str(&format!("\nFull Command: {}\nFull Path: {}\n", ft.full_command, ft.full_path));
+                    details.push_str(&format!(
+                        "\nFull Command: {}\nFull Path: {}\n",
+                        ft.full_command, ft.full_path
+                    ));
                     details
                 } else {
                     "Task not found".to_string()
@@ -253,11 +283,14 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             f.render_widget(Clear, area); // Clear the background
 
             let details_block = Paragraph::new(details_text)
-                .block(Block::default().borders(Borders::ALL).title(" Details (Esc to close) "))
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Details (Esc to close) "),
+                )
                 .wrap(Wrap { trim: false });
             f.render_widget(details_block, area);
         }
-
     } else {
         let loading = Paragraph::new("Loading state from Pueue...")
             .block(Block::default().borders(Borders::ALL).title(" Tasks "));
@@ -268,13 +301,31 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         Line::from(error).style(Style::default().fg(Color::Red))
     } else if ui_state.sort_mode {
         // Build sort options with highlighting for currently selected field
-        let highlight = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        let highlight = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
         let normal = Style::default();
 
-        let id_style = if ui_state.sort_field == SortField::Id { highlight } else { normal };
-        let status_style = if ui_state.sort_field == SortField::Status { highlight } else { normal };
-        let command_style = if ui_state.sort_field == SortField::Command { highlight } else { normal };
-        let path_style = if ui_state.sort_field == SortField::Path { highlight } else { normal };
+        let id_style = if ui_state.sort_field == SortField::Id {
+            highlight
+        } else {
+            normal
+        };
+        let status_style = if ui_state.sort_field == SortField::Status {
+            highlight
+        } else {
+            normal
+        };
+        let command_style = if ui_state.sort_field == SortField::Command {
+            highlight
+        } else {
+            normal
+        };
+        let path_style = if ui_state.sort_field == SortField::Path {
+            highlight
+        } else {
+            normal
+        };
 
         Line::from(vec![
             Span::raw("Sort by: "),
@@ -303,8 +354,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         Line::from("Connected to Pueue daemon")
     };
 
-    let footer = Paragraph::new(footer_content)
-        .block(Block::default().borders(Borders::ALL));
+    let footer = Paragraph::new(footer_content).block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
 
     // Error modal (takes priority over everything else)
@@ -314,7 +364,12 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
 
         let error_block = Paragraph::new(error)
             .style(Style::default().fg(Color::Red))
-            .block(Block::default().borders(Borders::ALL).title(" Error (Esc to dismiss) ").border_style(Style::default().fg(Color::Red)))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Error (Esc to dismiss) ")
+                    .border_style(Style::default().fg(Color::Red)),
+            )
             .wrap(Wrap { trim: false });
         f.render_widget(error_block, area);
     }
