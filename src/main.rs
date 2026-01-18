@@ -550,7 +550,7 @@ impl<P: PueueClientOps> App<P> {
                                     .map(|p| p.display().to_string())
                                     .unwrap_or_else(|| "config file".to_string());
                                 self.error_modal = Some(format!(
-                                    "No custom commands defined.\n\nAdd commands to:\n{}",
+                                    "No custom commands defined.\n\nAdd commands to {}",
                                     path
                                 ));
                             } else {
