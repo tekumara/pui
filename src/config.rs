@@ -1,4 +1,5 @@
 use anyhow::Result;
+use etcetera::{BaseStrategy, choose_base_strategy};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -21,22 +22,17 @@ pub struct CustomCommand {
 }
 
 impl Config {
-    /// Load config from $XDG_CONFIG_HOME/pui/config.toml
-    /// Falls back to ~/.config/pui/config.toml if XDG_CONFIG_HOME is not set
+    /// Load config from the platform config directory.
+    /// Linux/macOS: $XDG_CONFIG_HOME/pui/config.toml (fallback: ~/.config/pui/config.toml)
+    /// Windows: %APPDATA%\pui\config.toml
     pub fn load() -> Result<Self> {
-        let config_dir = std::env::var("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                dirs::home_dir()
-                    .unwrap_or_else(|| PathBuf::from("."))
-                    .join(".config")
-            });
-        let config_path = config_dir.join("pui").join("config.toml");
+        let config_path = choose_base_strategy()?.config_dir().join("pui").join("config.toml");
         Self::load_from_path(&config_path)
     }
 
     /// Load config from a specific path (useful for testing)
     pub fn load_from_path(path: &Path) -> Result<Self> {
+        println!("Loading config from: {}", path.display());
         if path.exists() {
             let content = std::fs::read_to_string(path)?;
             let mut config: Config = toml::from_str(&content)?;
