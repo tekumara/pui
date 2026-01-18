@@ -1,7 +1,10 @@
+mod config;
 mod pueue_client;
 #[cfg(test)]
 mod tests;
 mod ui;
+
+use crate::config::Config;
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
@@ -18,6 +21,9 @@ use pueue_lib::task::TaskStatus;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Load config before initializing terminal (so errors print normally)
+    let config = Config::load().unwrap_or_default();
+
     let terminal = ratatui::init();
     let pueue_client = match PueueClient::new().await {
         Ok(client) => client,
@@ -27,7 +33,7 @@ async fn main() -> Result<()> {
             return Ok(());
         }
     };
-    let app = App::new(pueue_client);
+    let app = App::new(pueue_client, config);
     let result = app.run(terminal).await;
     ratatui::restore();
     result
@@ -48,6 +54,7 @@ enum AppMode {
     Filter,
     Sort,
     Log(LogState),
+    CustomCommand,
 }
 
 #[derive(Debug)]
@@ -78,11 +85,13 @@ pub(crate) struct App<P: PueueClientOps> {
     connection_error: Option<String>,
     /// Error modal message (dismissible with Esc)
     error_modal: Option<String>,
+    /// Application configuration
+    pub(crate) config: Config,
 }
 
 impl<P: PueueClientOps> App<P> {
     /// Construct a new instance of [`App`].
-    pub fn new(pueue_client: P) -> Self {
+    pub fn new(pueue_client: P, config: Config) -> Self {
         let mut table_state = TableState::default();
         table_state.select(Some(0));
 
@@ -100,6 +109,7 @@ impl<P: PueueClientOps> App<P> {
             sort_field: SortField::default(),
             connection_error: None,
             error_modal: None,
+            config,
         }
     }
 
@@ -121,7 +131,7 @@ impl<P: PueueClientOps> App<P> {
                     if let Some(Ok(evt)) = event {
                         match evt {
                             Event::Key(key) if key.kind == KeyEventKind::Press => {
-                                self.on_key_event(key).await?;
+                                self.on_key_event(key, &mut terminal).await?;
                             }
                             Event::Mouse(_) | Event::Resize(_, _) => {}
                             _ => {}
@@ -232,6 +242,8 @@ impl<P: PueueClientOps> App<P> {
             connection_error: self.connection_error.as_deref(),
             error_modal: self.error_modal.as_deref(),
             selected_task_ids: &self.selected_task_ids,
+            custom_command_mode: matches!(self.app_mode, AppMode::CustomCommand),
+            custom_commands: &self.config.custom_commands,
         };
 
         ui::draw(frame, &mut ui_state);
@@ -274,7 +286,7 @@ impl<P: PueueClientOps> App<P> {
 
         if let Some(row) = self.table_state.selected() {
             // If the selected row is now past the end (e.g., last task was deleted),
-            // clamp to the new last row so we don't jump to the first item 
+            // clamp to the new last row so we don't jump to the first item
             let last_index = task_ids.len().saturating_sub(1);
             let clamped_row = row.min(last_index);
             if clamped_row != row {
@@ -289,7 +301,7 @@ impl<P: PueueClientOps> App<P> {
     }
 
     /// Handles the key events and updates the state of [`App`].
-    async fn on_key_event(&mut self, key: KeyEvent) -> Result<()> {
+    async fn on_key_event(&mut self, key: KeyEvent, terminal: &mut DefaultTerminal) -> Result<()> {
         let mut next_mode = None;
 
         match &mut self.app_mode {
@@ -346,6 +358,42 @@ impl<P: PueueClientOps> App<P> {
 
                 log_state.update_autoscroll(page_height, page_width);
             }
+            AppMode::CustomCommand => match key.code {
+                KeyCode::Esc => {
+                    next_mode = Some(AppMode::Normal);
+                }
+                KeyCode::Char('q') => self.quit(),
+                KeyCode::Char(c) => {
+                    // Find matching custom command by key
+                    let matching_cmd = self
+                        .config
+                        .custom_commands
+                        .iter()
+                        .find(|(_, cmd)| cmd.key.iter().any(|k| k == &c.to_string()));
+
+                    if let Some((name, cmd)) = matching_cmd {
+                        if let Some(task_path) = self.get_current_task_path() {
+                            let cmd_args = cmd.cmd.clone();
+                            let cmd_name = name.clone();
+                            // Clear terminal so the command doesn't paint over the TUI
+                            terminal.clear()?;
+                            // Run the command synchronously
+                            if let Err(e) = run_custom_command(&cmd_args, &task_path) {
+                                self.error_modal =
+                                    Some(format!("Command '{}' failed: {}", cmd_name, e));
+                            }
+                            // Clears terminal after the command has finished,
+                            // and forces a full redraw on next render
+                            terminal.clear()?;
+                        } else {
+                            self.error_modal = Some("No task selected".to_string());
+                        }
+                        next_mode = Some(AppMode::Normal);
+                    }
+                    // Ignore unbound keys - stay in CustomCommand mode
+                }
+                _ => {}
+            },
             AppMode::Normal => {
                 // Handle error modal first - Esc dismisses it
                 if self.error_modal.is_some() {
@@ -492,6 +540,22 @@ impl<P: PueueClientOps> App<P> {
                         }
                         KeyCode::Char('s') => {
                             self.app_mode = AppMode::Sort;
+                        }
+                        KeyCode::Char('c') => {
+                            if self.config.custom_commands.is_empty() {
+                                let path = self
+                                    .config
+                                    .config_path
+                                    .as_ref()
+                                    .map(|p| p.display().to_string())
+                                    .unwrap_or_else(|| "config file".to_string());
+                                self.error_modal = Some(format!(
+                                    "No custom commands defined.\n\nAdd commands to:\n{}",
+                                    path
+                                ));
+                            } else {
+                                self.app_mode = AppMode::CustomCommand;
+                            }
                         }
                         KeyCode::Char('r') => {
                             let target_ids = self.get_action_target_ids();
@@ -696,6 +760,55 @@ impl<P: PueueClientOps> App<P> {
         }
 
         Ok(log_state)
+    }
+
+    /// Get the path of the currently selected task
+    fn get_current_task_path(&self) -> Option<std::path::PathBuf> {
+        let task_id = self.current_task_id?;
+        let state = self.state.as_ref()?;
+        let task = state.tasks.get(&task_id)?;
+        Some(task.path.clone())
+    }
+}
+
+/// Run a custom command, temporarily suspending TUI mode.
+/// Disables raw mode so the command can use normal terminal I/O,
+/// then restores raw mode when done.
+pub fn run_custom_command(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
+    // Disable raw mode so command gets normal terminal I/O
+    // except in tests because we don't have the TUI and it messes with the output
+    #[cfg(not(test))]
+    {
+        crossterm::terminal::disable_raw_mode()?;
+    }
+
+    // Run the command
+    let result = std::process::Command::new(&cmd[0])
+        .args(&cmd[1..])
+        .current_dir(working_dir)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status();
+
+    // Restore raw mode which the TUI expects
+    #[cfg(not(test))]
+    {
+        crossterm::terminal::enable_raw_mode()?;
+    }
+
+    match result {
+        Ok(status) => {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!(
+                    "Command exited with status: {}",
+                    status.code().unwrap_or(-1)
+                ))
+            }
+        }
+        Err(e) => Err(e.into()),
     }
 }
 

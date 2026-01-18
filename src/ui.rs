@@ -1,4 +1,5 @@
 use crate::SortField;
+use crate::config::CustomCommand;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{
@@ -11,7 +12,7 @@ use ratatui::{
         ScrollbarState, Table, TableState, Wrap,
     },
 };
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 pub fn status_display(status: &TaskStatus) -> String {
@@ -135,6 +136,8 @@ pub struct UiState<'a> {
     pub connection_error: Option<&'a str>,
     pub error_modal: Option<&'a str>,
     pub selected_task_ids: &'a HashSet<usize>,
+    pub custom_command_mode: bool,
+    pub custom_commands: &'a BTreeMap<String, CustomCommand>,
 }
 
 pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
@@ -171,7 +174,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | c: Custom | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
@@ -356,6 +359,19 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             Span::raw("]ath").style(path_style),
             Span::raw(" | Esc: cancel"),
         ])
+    } else if ui_state.custom_command_mode {
+        // Build custom command options
+        let mut spans = vec![Span::raw("Run: ")];
+        for (name, cmd) in ui_state.custom_commands {
+            let key = cmd.key.first().map(|s| s.as_str()).unwrap_or("?");
+            spans.push(Span::raw("["));
+            spans.push(Span::raw(key).style(Style::default().add_modifier(Modifier::UNDERLINED)));
+            spans.push(Span::raw("] "));
+            spans.push(Span::raw(name.as_str()));
+            spans.push(Span::raw(" | "));
+        }
+        spans.push(Span::raw("Esc: cancel"));
+        Line::from(spans)
     } else if ui_state.input_mode {
         Line::from(format!("Filter: {}_ (Esc to clear)", ui_state.filter_text))
     } else if !ui_state.filter_text.is_empty() {

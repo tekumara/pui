@@ -4,11 +4,12 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, widgets::TableState};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::LogState;
 use crate::SortField;
+use crate::config::Config;
 use crate::pueue_client::PueueClientOps;
 use crate::ui;
 use pueue_lib::message::TaskToRestart;
@@ -174,6 +175,8 @@ async fn test_ui_snapshot() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -214,6 +217,8 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -277,6 +282,8 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -318,6 +325,8 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -355,6 +364,8 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -395,6 +406,8 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -455,6 +468,8 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -529,6 +544,8 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -599,7 +616,7 @@ async fn test_selection_follows_task_id_after_sort() -> Result<()> {
     let mock_client = MockPueueClient {
         state: state.clone(),
     };
-    let mut app = App::new(mock_client);
+    let mut app = App::new(mock_client, Config::default());
     app.state = Some(state);
 
     let backend = TestBackend::new(80, 24);
@@ -665,7 +682,7 @@ async fn test_selection_after_deleting_last_task() -> Result<()> {
     let mock_client = MockPueueClient {
         state: state.clone(),
     };
-    let mut app = App::new(mock_client);
+    let mut app = App::new(mock_client, Config::default());
     app.state = Some(state);
 
     let backend = TestBackend::new(80, 24);
@@ -760,6 +777,8 @@ async fn test_ui_snapshot_multiselect() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &selected_task_ids,
+            custom_command_mode: false,
+            custom_commands: &BTreeMap::new(),
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -769,4 +788,131 @@ async fn test_ui_snapshot_multiselect() -> Result<()> {
     insta::assert_snapshot!(ui);
 
     Ok(())
+}
+
+// Custom command tests
+
+/// Test that custom command runs in the specified directory
+#[test]
+fn test_custom_command_runs_in_correct_directory() {
+    use crate::run_custom_command;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let marker_file = temp_dir.path().join("marker.txt");
+
+    // Command that creates a file in the current directory
+    let result = run_custom_command(
+        &["touch".to_string(), "marker.txt".to_string()],
+        temp_dir.path(),
+    );
+
+    assert!(result.is_ok());
+    assert!(
+        marker_file.exists(),
+        "Command should run in specified directory"
+    );
+}
+
+/// Test that command arguments are passed correctly
+#[test]
+fn test_custom_command_passes_arguments() {
+    use crate::run_custom_command;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output_file = temp_dir.path().join("output.txt");
+
+    // Write specific content to verify args were passed
+    let result = run_custom_command(
+        &[
+            "sh".to_string(),
+            "-c".to_string(),
+            format!("echo 'hello world' > {}", output_file.display()),
+        ],
+        temp_dir.path(),
+    );
+
+    assert!(result.is_ok());
+    let content = std::fs::read_to_string(&output_file).unwrap();
+    assert_eq!(content.trim(), "hello world");
+}
+
+/// Test that command failure is reported
+#[test]
+fn test_custom_command_reports_failure() {
+    use crate::run_custom_command;
+    use std::path::Path;
+
+    let result = run_custom_command(
+        &["sh".to_string(), "-c".to_string(), "exit 42".to_string()],
+        Path::new("/tmp"),
+    );
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("42"));
+}
+
+/// Test that terminal is in cooked mode (icanon set) during command execution.
+/// This test verifies the terminal is properly restored for the external command.
+#[test]
+#[ignore] // Requires a real terminal - run with: cargo test -- --ignored
+fn test_terminal_is_cooked_mode_during_command() {
+    use crate::run_custom_command;
+    use std::io::IsTerminal;
+
+    // Skip in CI where there's no real terminal
+    if !std::io::stdin().is_terminal() {
+        eprintln!("Skipping: no tty");
+        return;
+    }
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let result_file = temp_dir.path().join("mode.txt");
+
+    // stty outputs "-icanon" in raw mode, "icanon" in cooked mode
+    let result = run_custom_command(
+        &[
+            "sh".to_string(),
+            "-c".to_string(),
+            format!(
+                "stty -a 2>/dev/null | grep -o '\\-\\?icanon' > {}",
+                result_file.display()
+            ),
+        ],
+        temp_dir.path(),
+    );
+
+    assert!(result.is_ok());
+    let mode = std::fs::read_to_string(&result_file).unwrap();
+    assert_eq!(
+        mode.trim(),
+        "icanon",
+        "Terminal should be in cooked mode (not raw) during command. Got: {}",
+        mode.trim()
+    );
+}
+
+/// Test that pwd matches working directory in spawned command
+#[test]
+fn test_custom_command_pwd_matches_working_directory() {
+    use crate::run_custom_command;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output_file = temp_dir.path().join("pwd.txt");
+
+    let result = run_custom_command(
+        &[
+            "sh".to_string(),
+            "-c".to_string(),
+            format!("pwd > {}", output_file.display()),
+        ],
+        temp_dir.path(),
+    );
+
+    assert!(result.is_ok());
+    let pwd = std::fs::read_to_string(&output_file).unwrap();
+    // Canonicalize both to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
+    assert_eq!(
+        std::fs::canonicalize(pwd.trim()).unwrap(),
+        std::fs::canonicalize(temp_dir.path()).unwrap()
+    );
 }
