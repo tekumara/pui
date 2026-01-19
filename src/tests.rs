@@ -175,8 +175,10 @@ async fn test_ui_snapshot() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -217,8 +219,10 @@ async fn test_ui_snapshot_with_details() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -282,8 +286,10 @@ async fn test_ui_snapshot_with_scrollbar() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -325,8 +331,10 @@ async fn test_ui_snapshot_filter_active() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -364,8 +372,10 @@ async fn test_ui_snapshot_remove_task() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -406,8 +416,10 @@ async fn test_ui_snapshot_log_view() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -468,8 +480,10 @@ async fn test_ui_snapshot_log_view_end_key() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -544,8 +558,10 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &HashSet::new(),
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -777,8 +793,10 @@ async fn test_ui_snapshot_multiselect() -> Result<()> {
             connection_error: None,
             error_modal: None,
             selected_task_ids: &selected_task_ids,
-            custom_command_mode: false,
+            help_mode: false,
+            help_scroll_offset: 0,
             custom_commands: &BTreeMap::new(),
+            config_path: None,
         };
         ui::draw(f, &mut ui_state);
     })?;
@@ -915,4 +933,200 @@ fn test_custom_command_pwd_matches_working_directory() {
         std::fs::canonicalize(pwd.trim()).unwrap(),
         std::fs::canonicalize(temp_dir.path()).unwrap()
     );
+}
+
+// Help mode tests
+
+/// Test help modal UI
+#[tokio::test]
+async fn test_ui_snapshot_help_mode() -> Result<()> {
+    // Set TZ to UTC for consistent snapshots across environments
+    unsafe {
+        std::env::set_var("TZ", "UTC");
+    }
+
+    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    // Create some custom commands for display
+    let mut custom_commands = BTreeMap::new();
+    custom_commands.insert(
+        "lazygit".to_string(),
+        crate::config::CustomCommand {
+            key: "ctrl+g".to_string(),
+            cmd: vec!["lazygit".to_string()],
+        },
+    );
+    custom_commands.insert(
+        "editor".to_string(),
+        crate::config::CustomCommand {
+            key: "alt+e".to_string(),
+            cmd: vec!["nvim".to_string()],
+        },
+    );
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
+            log_view: None,
+            connection_error: None,
+            error_modal: None,
+            selected_task_ids: &HashSet::new(),
+            help_mode: true,
+            help_scroll_offset: 0,
+            custom_commands: &custom_commands,
+            config_path: Some(std::path::Path::new("/home/user/.config/pui/config.toml")),
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
+
+    let ui = buffer_contents(terminal.backend().buffer());
+
+    insta::assert_snapshot!(ui);
+
+    Ok(())
+}
+
+/// Test find_matching_custom_command with simple key
+#[tokio::test]
+async fn test_find_matching_custom_command_simple_key() {
+    use crate::App;
+    use crate::config::{Config, CustomCommand};
+
+    let mut config = Config::default();
+    config.custom_commands.insert(
+        "test".to_string(),
+        CustomCommand {
+            key: "g".to_string(),
+            cmd: vec!["echo".to_string(), "test".to_string()],
+        },
+    );
+
+    let mock_client = MockPueueClient::new();
+    let app = App::new(mock_client, config);
+
+    // Test matching key
+    let key_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_some());
+    let (name, _) = result.unwrap();
+    assert_eq!(name, "test");
+
+    // Test non-matching key
+    let key_event = KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_none());
+
+    // Test with modifier when none expected - should not match
+    let key_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_none());
+}
+
+/// Test find_matching_custom_command with ctrl modifier
+#[tokio::test]
+async fn test_find_matching_custom_command_ctrl_key() {
+    use crate::App;
+    use crate::config::{Config, CustomCommand};
+
+    let mut config = Config::default();
+    config.custom_commands.insert(
+        "test".to_string(),
+        CustomCommand {
+            key: "ctrl+g".to_string(),
+            cmd: vec!["echo".to_string()],
+        },
+    );
+
+    let mock_client = MockPueueClient::new();
+    let app = App::new(mock_client, config);
+
+    // Test matching key with ctrl
+    let key_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::CONTROL);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_some());
+
+    // Test without modifier - should not match
+    let key_event = KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_none());
+}
+
+/// Test find_matching_custom_command with alt modifier
+#[tokio::test]
+async fn test_find_matching_custom_command_alt_key() {
+    use crate::App;
+    use crate::config::{Config, CustomCommand};
+
+    let mut config = Config::default();
+    config.custom_commands.insert(
+        "test".to_string(),
+        CustomCommand {
+            key: "alt+r".to_string(),
+            cmd: vec!["echo".to_string()],
+        },
+    );
+
+    let mock_client = MockPueueClient::new();
+    let app = App::new(mock_client, config);
+
+    // Test matching key with alt
+    let key_event = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::ALT);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_some());
+}
+
+/// Test find_matching_custom_command with opt modifier (alias for alt)
+#[tokio::test]
+async fn test_find_matching_custom_command_opt_key() {
+    use crate::App;
+    use crate::config::{Config, CustomCommand};
+
+    let mut config = Config::default();
+    config.custom_commands.insert(
+        "test".to_string(),
+        CustomCommand {
+            key: "opt+q".to_string(),
+            cmd: vec!["echo".to_string()],
+        },
+    );
+
+    let mock_client = MockPueueClient::new();
+    let app = App::new(mock_client, config);
+
+    // Test matching key with alt (opt is alias for alt)
+    let key_event = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT);
+    let result = app.find_matching_custom_command(&key_event);
+    assert!(result.is_some());
+}
+
+/// Test config command parsing with new single key format
+#[test]
+fn test_config_parse_with_modifiers() {
+    let toml = r#"
+[custom_commands]
+lazygit = { key = "ctrl+g", cmd = ["lazygit"] }
+editor = { key = "alt+e", cmd = ["nvim", "."] }
+simple = { key = "t", cmd = ["echo", "test"] }
+"#;
+    let config: Config = toml::from_str(toml).unwrap();
+    assert_eq!(config.custom_commands.len(), 3);
+
+    let lazygit = config.custom_commands.get("lazygit").unwrap();
+    assert_eq!(lazygit.key, "ctrl+g");
+
+    let editor = config.custom_commands.get("editor").unwrap();
+    assert_eq!(editor.key, "alt+e");
+
+    let simple = config.custom_commands.get("simple").unwrap();
+    assert_eq!(simple.key, "t");
 }

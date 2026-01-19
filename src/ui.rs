@@ -136,8 +136,50 @@ pub struct UiState<'a> {
     pub connection_error: Option<&'a str>,
     pub error_modal: Option<&'a str>,
     pub selected_task_ids: &'a HashSet<usize>,
-    pub custom_command_mode: bool,
+    pub help_mode: bool,
+    pub help_scroll_offset: u16,
     pub custom_commands: &'a BTreeMap<String, CustomCommand>,
+    pub config_path: Option<&'a std::path::Path>,
+}
+
+pub fn build_help_text(
+    custom_commands: &BTreeMap<String, CustomCommand>,
+    config_path: Option<&Path>,
+) -> String {
+    let mut help_text = String::new();
+    help_text.push_str("Navigation\n");
+    help_text.push_str("  j/↓       Move down\n");
+    help_text.push_str("  k/↑       Move up\n");
+    help_text.push_str("  PgUp/PgDn Page up/down\n");
+    help_text.push_str("  Home/End  First/last task\n");
+    help_text.push_str("\nActions\n");
+    help_text.push_str("  Space     Toggle selection\n");
+    help_text.push_str("  Enter     View task logs\n");
+    help_text.push_str("  r         Run/restart task(s)\n");
+    help_text.push_str("  p         Pause task(s)\n");
+    help_text.push_str("  x         Kill task(s)\n");
+    help_text.push_str("  Backspace Remove task(s)\n");
+    help_text.push_str("  d         Show task details\n");
+    help_text.push_str("\nOther\n");
+    help_text.push_str("  f         Filter tasks\n");
+    help_text.push_str("  s         Sort tasks\n");
+    help_text.push_str("  c         Edit config file\n");
+    help_text.push_str("  ?         Show this help\n");
+    help_text.push_str("  q         Quit\n");
+    help_text.push_str("  Esc       Clear selection/filter\n");
+
+    if !custom_commands.is_empty() {
+        help_text.push_str("\nCustom Commands\n");
+        for (name, cmd) in custom_commands {
+            help_text.push_str(&format!("  {:10} {}\n", cmd.key, name));
+        }
+    }
+
+    if let Some(path) = config_path {
+        help_text.push_str(&format!("\nConfig: {}", path.display()));
+    }
+
+    help_text
 }
 
 pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
@@ -174,7 +216,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | c: Custom | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | q: Quit")
+    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | c: Config | ?: Help | q: Quit")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
@@ -359,19 +401,6 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             Span::raw("]ath").style(path_style),
             Span::raw(" | Esc: cancel"),
         ])
-    } else if ui_state.custom_command_mode {
-        // Build custom command options
-        let mut spans = vec![Span::raw("Run: ")];
-        for (name, cmd) in ui_state.custom_commands {
-            let key = cmd.key.first().map(|s| s.as_str()).unwrap_or("?");
-            spans.push(Span::raw("["));
-            spans.push(Span::raw(key).style(Style::default().add_modifier(Modifier::UNDERLINED)));
-            spans.push(Span::raw("] "));
-            spans.push(Span::raw(name.as_str()));
-            spans.push(Span::raw(" | "));
-        }
-        spans.push(Span::raw("Esc: cancel"));
-        Line::from(spans)
     } else if ui_state.input_mode {
         Line::from(format!("Filter: {}_ (Esc to clear)", ui_state.filter_text))
     } else if !ui_state.filter_text.is_empty() {
@@ -387,6 +416,39 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
 
     let footer = Paragraph::new(footer_content).block(Block::default().borders(Borders::ALL));
     f.render_widget(footer, chunks[2]);
+
+    // Help modal
+    if ui_state.help_mode {
+        let area = centered_rect(70, 80, f.area());
+        f.render_widget(Clear, area);
+
+        let help_text = build_help_text(ui_state.custom_commands, ui_state.config_path);
+        let content_width = area.width.saturating_sub(2).max(1);
+        let content_height = area.height.saturating_sub(2);
+        let line_count = Paragraph::new(help_text.as_str())
+            .wrap(Wrap { trim: false })
+            .line_count(content_width) as u16;
+
+        let help_block = Paragraph::new(help_text)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" Key Bindings (? or Esc to close) "),
+            )
+            .wrap(Wrap { trim: false })
+            .scroll((ui_state.help_scroll_offset, 0));
+        f.render_widget(help_block, area);
+
+        if line_count > content_height {
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("↑"))
+                .end_symbol(Some("↓"));
+            let mut scrollbar_state = ScrollbarState::new(line_count as usize)
+                .viewport_content_length(content_height as usize)
+                .position(ui_state.help_scroll_offset as usize);
+            f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
+        }
+    }
 
     // Error modal (takes priority over everything else)
     if let Some(error) = ui_state.error_modal {

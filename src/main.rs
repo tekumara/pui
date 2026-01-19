@@ -4,12 +4,12 @@ mod pueue_client;
 mod tests;
 mod ui;
 
-use crate::config::Config;
+use crate::config::{Config, CustomCommand, ParsedKey};
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
 use futures::stream::StreamExt;
-use ratatui::{DefaultTerminal, Frame, widgets::TableState};
+use ratatui::{DefaultTerminal, Frame, widgets::{Paragraph, TableState, Wrap}};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
@@ -22,7 +22,7 @@ use pueue_lib::task::TaskStatus;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load config before initializing terminal (so errors print normally)
-    let config = Config::load().unwrap_or_default();
+    let config = Config::load()?;
 
     let terminal = ratatui::init();
     let pueue_client = match PueueClient::new().await {
@@ -54,7 +54,7 @@ enum AppMode {
     Filter,
     Sort,
     Log(LogState),
-    CustomCommand,
+    Help,
 }
 
 #[derive(Debug)]
@@ -87,6 +87,8 @@ pub(crate) struct App<P: PueueClientOps> {
     error_modal: Option<String>,
     /// Application configuration
     pub(crate) config: Config,
+    /// Scroll offset for help modal
+    help_scroll_offset: u16,
 }
 
 impl<P: PueueClientOps> App<P> {
@@ -110,6 +112,7 @@ impl<P: PueueClientOps> App<P> {
             connection_error: None,
             error_modal: None,
             config,
+            help_scroll_offset: 0,
         }
     }
 
@@ -242,8 +245,10 @@ impl<P: PueueClientOps> App<P> {
             connection_error: self.connection_error.as_deref(),
             error_modal: self.error_modal.as_deref(),
             selected_task_ids: &self.selected_task_ids,
-            custom_command_mode: matches!(self.app_mode, AppMode::CustomCommand),
+            help_mode: matches!(self.app_mode, AppMode::Help),
+            help_scroll_offset: self.help_scroll_offset,
             custom_commands: &self.config.custom_commands,
+            config_path: self.config.config_path.as_deref(),
         };
 
         ui::draw(frame, &mut ui_state);
@@ -296,7 +301,7 @@ impl<P: PueueClientOps> App<P> {
         } else {
             // No row selected yet; default to the first task.
             self.table_state.select(Some(0));
-            self.current_task_id = task_ids.get(0).copied();
+            self.current_task_id = task_ids.first().copied();
         }
     }
 
@@ -358,42 +363,45 @@ impl<P: PueueClientOps> App<P> {
 
                 log_state.update_autoscroll(page_height, page_width);
             }
-            AppMode::CustomCommand => match key.code {
-                KeyCode::Esc => {
-                    next_mode = Some(AppMode::Normal);
-                }
-                KeyCode::Char('q') => self.quit(),
-                KeyCode::Char(c) => {
-                    // Find matching custom command by key
-                    let matching_cmd = self
-                        .config
-                        .custom_commands
-                        .iter()
-                        .find(|(_, cmd)| cmd.key.iter().any(|k| k == &c.to_string()));
+            AppMode::Help => {
+                let terminal_size = crossterm::terminal::size()?;
+                let modal_height = terminal_size.1.saturating_mul(80).saturating_div(100);
+                let modal_width = terminal_size.0.saturating_mul(70).saturating_div(100);
+                let content_height = modal_height.saturating_sub(2);
+                let content_width = modal_width.saturating_sub(2);
+                let line_count = self.help_line_count(content_width);
+                let max_offset = line_count.saturating_sub(content_height);
 
-                    if let Some((name, cmd)) = matching_cmd {
-                        if let Some(task_path) = self.get_current_task_path() {
-                            let cmd_args = cmd.cmd.clone();
-                            let cmd_name = name.clone();
-                            // Clear terminal so the command doesn't paint over the TUI
-                            terminal.clear()?;
-                            // Run the command synchronously
-                            if let Err(e) = run_custom_command(&cmd_args, &task_path) {
-                                self.error_modal =
-                                    Some(format!("Command '{}' failed: {}", cmd_name, e));
-                            }
-                            // Clears terminal after the command has finished,
-                            // and forces a full redraw on next render
-                            terminal.clear()?;
-                        } else {
-                            self.error_modal = Some("No task selected".to_string());
-                        }
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('?') => {
                         next_mode = Some(AppMode::Normal);
                     }
-                    // Ignore unbound keys - stay in CustomCommand mode
+                    KeyCode::Char('q') => self.quit(),
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        self.help_scroll_offset = self.help_scroll_offset.saturating_sub(1);
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        self.help_scroll_offset = self.help_scroll_offset.saturating_add(1);
+                    }
+                    KeyCode::PageUp => {
+                        self.help_scroll_offset =
+                            self.help_scroll_offset.saturating_sub(content_height);
+                    }
+                    KeyCode::PageDown => {
+                        self.help_scroll_offset =
+                            self.help_scroll_offset.saturating_add(content_height);
+                    }
+                    KeyCode::Home => {
+                        self.help_scroll_offset = 0;
+                    }
+                    KeyCode::End => {
+                        self.help_scroll_offset = max_offset;
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
+
+                self.help_scroll_offset = self.help_scroll_offset.min(max_offset);
+            }
             AppMode::Normal => {
                 // Handle error modal first - Esc dismisses it
                 if self.error_modal.is_some() {
@@ -542,20 +550,30 @@ impl<P: PueueClientOps> App<P> {
                             self.app_mode = AppMode::Sort;
                         }
                         KeyCode::Char('c') => {
-                            if self.config.custom_commands.is_empty() {
-                                let path = self
-                                    .config
-                                    .config_path
-                                    .as_ref()
-                                    .map(|p| p.display().to_string())
-                                    .unwrap_or_else(|| "config file".to_string());
-                                self.error_modal = Some(format!(
-                                    "No custom commands defined.\n\nAdd commands to {}",
-                                    path
-                                ));
+                            // Open config file in $EDITOR (or vim if $EDITOR is not set)
+                            if let Some(config_path) = &self.config.config_path {
+                                let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+                                terminal.clear()?;
+                                if let Err(e) = run_custom_command(
+                                    &[editor.clone(), config_path.display().to_string()],
+                                    &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
+                                ) {
+                                    self.error_modal = Some(format!("Failed to open config in {}: {}", editor, e));
+                                } else {
+                                    // Reload config after editing
+                                    match Config::load() {
+                                        Ok(new_config) => self.config = new_config,
+                                        Err(e) => self.error_modal = Some(format!("Failed to reload config: {}", e)),
+                                    }
+                                }
+                                terminal.clear()?;
                             } else {
-                                self.app_mode = AppMode::CustomCommand;
+                                self.error_modal = Some("Config path not available".to_string());
                             }
+                        }
+                        KeyCode::Char('?') => {
+                            self.help_scroll_offset = 0;
+                            next_mode = Some(AppMode::Help);
                         }
                         KeyCode::Char('r') => {
                             let target_ids = self.get_action_target_ids();
@@ -660,7 +678,26 @@ impl<P: PueueClientOps> App<P> {
                                 }
                             }
                         }
-                        _ => {}
+                        _ => {
+                            // Check for custom command key bindings
+                            if let Some((name, cmd)) = self.find_matching_custom_command(&key) {
+                                if let Some(task_path) = self.get_current_task_path() {
+                                    let cmd_args = cmd.cmd.clone();
+                                    let cmd_name = name.clone();
+                                    // Clear terminal so the command doesn't paint over the TUI
+                                    terminal.clear()?;
+                                    if let Err(e) = run_custom_command(&cmd_args, &task_path) {
+                                        self.error_modal =
+                                            Some(format!("Command '{}' failed: {}", cmd_name, e));
+                                    }
+                                    // Clears terminal after the command has finished
+                                    // and forces a full redraw on next render
+                                    terminal.clear()?;
+                                } else {
+                                    self.error_modal = Some("No task selected".to_string());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -768,6 +805,25 @@ impl<P: PueueClientOps> App<P> {
         let state = self.state.as_ref()?;
         let task = state.tasks.get(&task_id)?;
         Some(task.path.clone())
+    }
+
+    /// Find a custom command that matches the given key event
+    fn find_matching_custom_command(&self, key: &KeyEvent) -> Option<(String, CustomCommand)> {
+        for (name, cmd) in &self.config.custom_commands {
+            if let Some(parsed_key) = ParsedKey::parse(&cmd.key)
+                && parsed_key.matches(key)
+            {
+                return Some((name.clone(), cmd.clone()));
+            }
+        }
+        None
+    }
+
+    fn help_line_count(&self, content_width: u16) -> u16 {
+        let help_text = ui::build_help_text(&self.config.custom_commands, self.config.config_path.as_deref());
+        let width = content_width.max(1);
+        let p = Paragraph::new(help_text).wrap(Wrap { trim: false });
+        p.line_count(width) as u16
     }
 }
 
