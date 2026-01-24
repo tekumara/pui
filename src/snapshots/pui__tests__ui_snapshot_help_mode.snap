@@ -4,24 +4,24 @@ expression: ui
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────↑use | x: K│ 
- └──────────│Navigation                                            █──────────┘ 
- ┌ Tasks ───│  j/↓       Move down                                 █──────────┐ 
- │     Id   │  k/↑       Move up                                   █Duration  │ 
- │>>   0    │  PgUp/PgDn Page up/down                              █0s        │ 
- │     1    │  Home/End  First/last task                           █0s        │ 
- │     2    │                                                      █0s        │ 
- │          │Actions                                               █          │ 
- │          │  Space     Toggle selection                          ║          │ 
- │          │  Enter     View task logs                            ║          │ 
- │          │  r         Run/restart task(s)                       ║          │ 
- │          │  p         Pause task(s)                             ║          │ 
- │          │  x         Kill task(s)                              ║          │ 
- │          │  Backspace Remove task(s)                            ║          │ 
- │          │  d         Show task details                         ║          │ 
- │          │                                                      ║          │ 
- │          │Other                                                 ║          │ 
- └──────────│  f         Filter tasks                              ║──────────┘ 
- ┌──────────│  s         Sort tasks                                ║──────────┐ 
- │Connected └──────────────────────────────────────────────────────↓          │ 
+ │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────┐use | x: K│ 
+ └──────────│Navigation                                           ↑│──────────┘ 
+ ┌ Tasks ───│  j/↓       Move down                                █│──────────┐ 
+ │     Id   │  k/↑       Move up                                  █│Duration  │ 
+ │>>   0    │  PgUp/PgDn Page up/down                             █│0s        │ 
+ │     1    │  Home/End  First/last task                          █│0s        │ 
+ │     2    │                                                     █│0s        │ 
+ │          │Actions                                              █│          │ 
+ │          │  Space     Toggle selection                         ║│          │ 
+ │          │  Enter     View task logs                           ║│          │ 
+ │          │  r         Run/restart task(s)                      ║│          │ 
+ │          │  p         Pause task(s)                            ║│          │ 
+ │          │  x         Kill task(s)                             ║│          │ 
+ │          │  Backspace Remove task(s)                           ║│          │ 
+ │          │  d         Show task details                        ║│          │ 
+ │          │                                                     ║│          │ 
+ │          │Other                                                ║│          │ 
+ └──────────│  f         Filter tasks                             ║│──────────┘ 
+ ┌──────────│  s         Sort tasks                               ↓│──────────┐ 
+ │Connected └──────────────────────────────────────────────────────┘          │ 
  └────────────────────────────────────────────────────────────────────────────┘

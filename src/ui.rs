@@ -4,7 +4,7 @@ use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{
@@ -484,7 +484,12 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             let mut scrollbar_state = ScrollbarState::new(line_count)
                 .viewport_content_length(content_height as usize)
                 .position(position);
-            f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
+            // rnender scrollbar within the help modal border
+            let scrollbar_area = area.inner(Margin {
+                vertical: 1,
+                horizontal: 1,
+            });
+            f.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
         }
     }
 
