@@ -2,10 +2,11 @@
 name = "pui"
 version = "0.1.0"
 edition = "2024"
+default-run = "pui"
 
 [dependencies]
 ratatui = "0.30.0"
-crossterm = { version = "0.28.1", features = ["event-stream"] }
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 tokio = { version = "1.42.0", features = ["full"] }
 anyhow = "1.0.94"
 pueue-lib = "0.30.1"
@@ -23,6 +24,7 @@ etcetera = "0.11.0"
 chrono = "0.4.42"
 insta = "1.46.0"
 tempfile = "3"
+libc = "0.2"
 
 # compile in release mode
 [profile.dev.package]
