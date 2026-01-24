@@ -102,7 +102,7 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+pub(crate) fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -180,6 +180,25 @@ pub fn build_help_text(
     }
 
     help_text
+}
+
+pub(crate) fn help_modal_line_count(
+    custom_commands: &BTreeMap<String, CustomCommand>,
+    config_path: Option<&Path>,
+    content_width: u16,
+    content_height: u16,
+) -> u16 {
+    let help_text = build_help_text(custom_commands, config_path);
+    let width = content_width.max(1);
+    let paragraph = Paragraph::new(help_text).wrap(Wrap { trim: false });
+    let mut line_count = paragraph.line_count(width) as u16;
+
+    if line_count > content_height && width > 1 {
+        // Account for the scrollbar column overwriting the last text column.
+        line_count = paragraph.line_count(width.saturating_sub(1)) as u16;
+    }
+
+    line_count
 }
 
 pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
@@ -425,9 +444,12 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         let help_text = build_help_text(ui_state.custom_commands, ui_state.config_path);
         let content_width = area.width.saturating_sub(2).max(1);
         let content_height = area.height.saturating_sub(2);
-        let line_count = Paragraph::new(help_text.as_str())
-            .wrap(Wrap { trim: false })
-            .line_count(content_width) as u16;
+        let line_count = help_modal_line_count(
+            ui_state.custom_commands,
+            ui_state.config_path,
+            content_width,
+            content_height,
+        );
 
         let help_block = Paragraph::new(help_text)
             .block(
@@ -443,9 +465,25 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(Some("↑"))
                 .end_symbol(Some("↓"));
-            let mut scrollbar_state = ScrollbarState::new(line_count as usize)
+            let line_count = line_count as usize;
+            let max_offset = line_count.saturating_sub(content_height as usize);
+            // Map scroll offset to full content range so the thumb reaches both ends.
+            // This is needed because help_scroll_offset is a top-of-viewport index,
+            // while the scrollbar thumb position expects a position within the full content range.
+            // Passing the raw offset means the thumb never reaches the bottom.
+            // So we map offset from [0..max_offset] to [0..line_count-1]
+            // The task table doesn't need this because it uses the selected row index.
+            let position = if max_offset == 0 || line_count <= 1 {
+                0
+            } else {
+                let scaled = (ui_state.help_scroll_offset as usize)
+                    .saturating_mul(line_count.saturating_sub(1))
+                    / max_offset;
+                scaled.min(line_count.saturating_sub(1))
+            };
+            let mut scrollbar_state = ScrollbarState::new(line_count)
                 .viewport_content_length(content_height as usize)
-                .position(ui_state.help_scroll_offset as usize);
+                .position(position);
             f.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
         }
     }
