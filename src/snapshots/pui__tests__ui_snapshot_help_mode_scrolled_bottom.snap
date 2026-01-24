@@ -4,24 +4,24 @@ expression: ui
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────↑use | x: K│ 
- └──────────│  p         Pause task(s)                             ║──────────┘ 
- ┌ Tasks ───│  x         Kill task(s)                              ║──────────┐ 
- │     Id   │  Backspace Remove task(s)                            ║Duration  │ 
- │>>   0    │  d         Show task details                         ║0s        │ 
- │     1    │                                                      ║0s        │ 
- │     2    │Other                                                 ║0s        │ 
- │          │  f         Filter tasks                              ║          │ 
- │          │  s         Sort tasks                                ║          │ 
- │          │  c         Edit config file                          ║          │ 
- │          │  ?         Show this help                            ║          │ 
- │          │  q         Quit                                      ║          │ 
- │          │  Esc       Clear selection/filter                    █          │ 
- │          │                                                      █          │ 
- │          │Custom Commands                                       █          │ 
- │          │  alt+e      editor                                   █          │ 
- │          │  ctrl+g     lazygit                                  █          │ 
- └──────────│                                                      █──────────┘ 
- ┌──────────│Config: /home/user/.config/pui/config.toml            █──────────┐ 
- │Connected └──────────────────────────────────────────────────────↓          │ 
+ │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────┐use | x: K│ 
+ └──────────│  p         Pause task(s)                            ↑│──────────┘ 
+ ┌ Tasks ───│  x         Kill task(s)                             ║│──────────┐ 
+ │     Id   │  Backspace Remove task(s)                           ║│Duration  │ 
+ │>>   0    │  d         Show task details                        ║│0s        │ 
+ │     1    │                                                     ║│0s        │ 
+ │     2    │Other                                                ║│0s        │ 
+ │          │  f         Filter tasks                             ║│          │ 
+ │          │  s         Sort tasks                               ║│          │ 
+ │          │  c         Edit config file                         ║│          │ 
+ │          │  ?         Show this help                           ║│          │ 
+ │          │  q         Quit                                     ║│          │ 
+ │          │  Esc       Clear selection/filter                   █│          │ 
+ │          │                                                     █│          │ 
+ │          │Custom Commands                                      █│          │ 
+ │          │  alt+e      editor                                  █│          │ 
+ │          │  ctrl+g     lazygit                                 █│          │ 
+ └──────────│                                                     █│──────────┘ 
+ ┌──────────│Config: /home/user/.config/pui/config.toml           ↓│──────────┐ 
+ │Connected └──────────────────────────────────────────────────────┘          │ 
  └────────────────────────────────────────────────────────────────────────────┘
