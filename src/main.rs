@@ -9,7 +9,7 @@ use crate::config::{Config, CustomCommand, ParsedKey};
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
 use futures::stream::StreamExt;
-use ratatui::{DefaultTerminal, Frame, widgets::{Paragraph, TableState, Wrap}};
+use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::TableState};
 use std::collections::HashSet;
 use std::time::Duration;
 use tokio::time::MissedTickBehavior;
@@ -365,11 +365,19 @@ impl<P: PueueClientOps> App<P> {
             }
             AppMode::Help => {
                 let terminal_size = crossterm::terminal::size()?;
-                let modal_height = terminal_size.1.saturating_mul(80).saturating_div(100);
-                let modal_width = terminal_size.0.saturating_mul(70).saturating_div(100);
-                let content_height = modal_height.saturating_sub(2);
-                let content_width = modal_width.saturating_sub(2);
-                let line_count = self.help_line_count(content_width);
+                let modal_area = ui::centered_rect(
+                    70,
+                    80,
+                    Rect::new(0, 0, terminal_size.0, terminal_size.1),
+                );
+                let content_height = modal_area.height.saturating_sub(2);
+                let content_width = modal_area.width.saturating_sub(2).max(1);
+                let line_count = ui::help_modal_line_count(
+                    &self.config.custom_commands,
+                    self.config.config_path.as_deref(),
+                    content_width,
+                    content_height,
+                );
                 let max_offset = line_count.saturating_sub(content_height);
 
                 match key.code {
@@ -400,6 +408,7 @@ impl<P: PueueClientOps> App<P> {
                     _ => {}
                 }
 
+                // don't overscroll into black rows below the help text
                 self.help_scroll_offset = self.help_scroll_offset.min(max_offset);
             }
             AppMode::Normal => {
@@ -819,12 +828,6 @@ impl<P: PueueClientOps> App<P> {
         None
     }
 
-    fn help_line_count(&self, content_width: u16) -> u16 {
-        let help_text = ui::build_help_text(&self.config.custom_commands, self.config.config_path.as_deref());
-        let width = content_width.max(1);
-        let p = Paragraph::new(help_text).wrap(Wrap { trim: false });
-        p.line_count(width) as u16
-    }
 }
 
 /// Run a custom command, temporarily suspending TUI mode.

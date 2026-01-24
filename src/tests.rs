@@ -3,7 +3,13 @@ use chrono::{Local, TimeZone};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, widgets::TableState};
+use ratatui::{
+    Terminal,
+    backend::TestBackend,
+    buffer::Buffer,
+    layout::Rect,
+    widgets::TableState,
+};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -983,6 +989,76 @@ async fn test_ui_snapshot_help_mode() -> Result<()> {
             selected_task_ids: &HashSet::new(),
             help_mode: true,
             help_scroll_offset: 0,
+            custom_commands: &custom_commands,
+            config_path: Some(std::path::Path::new("/home/user/.config/pui/config.toml")),
+        };
+        ui::draw(f, &mut ui_state);
+    })?;
+
+    let ui = buffer_contents(terminal.backend().buffer());
+
+    insta::assert_snapshot!(ui);
+
+    Ok(())
+}
+
+/// Test help modal UI scrolled to the bottom
+#[tokio::test]
+async fn test_ui_snapshot_help_mode_scrolled_bottom() -> Result<()> {
+    // Set TZ to UTC for consistent snapshots across environments
+    unsafe {
+        std::env::set_var("TZ", "UTC");
+    }
+
+    let (state, task_ids, mut terminal, jiff_now) = setup_test_ui().await?;
+    let mut table_state = TableState::default();
+    table_state.select(Some(0));
+
+    // Create some custom commands for display
+    let mut custom_commands = BTreeMap::new();
+    custom_commands.insert(
+        "lazygit".to_string(),
+        crate::config::CustomCommand {
+            key: "ctrl+g".to_string(),
+            cmd: vec!["lazygit".to_string()],
+        },
+    );
+    custom_commands.insert(
+        "editor".to_string(),
+        crate::config::CustomCommand {
+            key: "alt+e".to_string(),
+            cmd: vec!["nvim".to_string()],
+        },
+    );
+
+    let modal_area = ui::centered_rect(70, 80, Rect::new(0, 0, 80, 24));
+    let content_height = modal_area.height.saturating_sub(2);
+    let content_width = modal_area.width.saturating_sub(2).max(1);
+    let line_count = ui::help_modal_line_count(
+        &custom_commands,
+        Some(std::path::Path::new("/home/user/.config/pui/config.toml")),
+        content_width,
+        content_height,
+    );
+    let max_offset = line_count.saturating_sub(content_height);
+
+    terminal.draw(|f| {
+        let mut ui_state = ui::UiState {
+            state: &Some(state),
+            table_state: &mut table_state,
+            task_ids: &task_ids,
+            now: jiff_now,
+            show_details: false,
+            filter_text: "",
+            input_mode: false,
+            sort_mode: false,
+            sort_field: SortField::default(),
+            log_view: None,
+            connection_error: None,
+            error_modal: None,
+            selected_task_ids: &HashSet::new(),
+            help_mode: true,
+            help_scroll_offset: max_offset,
             custom_commands: &custom_commands,
             config_path: Some(std::path::Path::new("/home/user/.config/pui/config.toml")),
         };
