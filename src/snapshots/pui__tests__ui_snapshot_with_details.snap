@@ -14,12 +14,12 @@ expression: ui
  │              │--option2 value2 --option3 value3 --option4   │              │ 
  │              │value4 --option5 value5 --option6 value6      │              │ 
  │              │Path: /v/l/p/t/a/d/t/s/d/w/a/s/p/i/t/u/view   │              │ 
+ │              │End: -                                        │              │ 
  │              │Duration: 0s                                  │              │ 
  │              │Group: default                                │              │ 
  │              │                                              │              │ 
  │              │Full Command: long_command --option1 value1   │              │ 
  │              │--option2 value2 --option3 value3 --option4   │              │ 
- │              │value4 --option5 value5 --option6 value6      │              │ 
  │              └──────────────────────────────────────────────┘              │ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌────────────────────────────────────────────────────────────────────────────┐ 

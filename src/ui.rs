@@ -38,6 +38,7 @@ pub struct FormattedTask<'a> {
     pub status: String,
     pub command: String,
     pub path: String,
+    pub end: String,
     pub duration: String,
     pub full_command: &'a str,
     pub full_path: String,
@@ -82,6 +83,19 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
         "-".to_string()
     };
 
+    let end_str = if let Some(end_time) = end {
+        let end_ts = jiff::Timestamp::from_second(end_time.timestamp()).unwrap();
+        let end_zoned = end_ts.to_zoned(jiff::tz::TimeZone::system());
+        let now_zoned = now.to_zoned(jiff::tz::TimeZone::system());
+        if end_zoned.date() == now_zoned.date() {
+            format!("{:02}:{:02}", end_zoned.hour(), end_zoned.minute())
+        } else {
+            format!("{}", end_zoned.date())
+        }
+    } else {
+        "-".to_string()
+    };
+
     let command_basename = Path::new(&task.command)
         .file_name()
         .and_then(|s| s.to_str())
@@ -93,6 +107,7 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
         status: status_display(&task.status),
         command: command_basename,
         path: tico::tico(&task.path.to_string_lossy()),
+        end: end_str,
         duration: duration_str,
         full_command: &task.command,
         full_path: task.path.to_string_lossy().into_owned(),
@@ -276,6 +291,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                     Cell::from(ft.id),
                     Cell::from(ft.path),
                     Cell::from(ft.command),
+                    Cell::from(ft.end),
                     Cell::from(ft.duration),
                     Cell::from(ft.status),
                 ])
@@ -283,7 +299,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             })
             .collect();
 
-        let header = Row::new(vec![" ", "Id", "Path", "Command", "Duration", "Status"]).style(
+        let header = Row::new(vec![" ", "Id", "Path", "Command", "End", "Duration", "Status"]).style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::Cyan),
@@ -294,6 +310,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             Constraint::Length(4),      // Id
             Constraint::Percentage(70), // Path
             Constraint::Percentage(30), // Command
+            Constraint::Length(10),     // End
             Constraint::Length(10),     // Duration
             Constraint::Length(12),     // Status
         ];
@@ -335,8 +352,8 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                     let ft = format_task(*id, task, &ui_state.now);
 
                     let mut details = format!(
-                        "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nDuration: {}\nGroup: {}\n",
-                        ft.id, ft.status, ft.command, ft.path, ft.duration, ft.group
+                        "ID: {}\nStatus: {}\nCommand: {}\nPath: {}\nEnd: {}\nDuration: {}\nGroup: {}\n",
+                        ft.id, ft.status, ft.command, ft.path, ft.end, ft.duration, ft.group
                     );
                     if let Some(label) = ft.label {
                         details.push_str(&format!("Label: {}\n", label));
