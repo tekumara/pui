@@ -7,10 +7,10 @@ expression: ui
  │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────┐use | x: K│ 
  └──────────│Navigation                                           ↑│──────────┘ 
  ┌ Tasks ───│  j/↓       Move down                                █│──────────┐ 
- │     Id   │  k/↑       Move up                                  █│Duration  │ 
- │>>   0    │  PgUp/PgDn Page up/down                             █│0s        │ 
- │     1    │  Home/End  First/last task                          █│0s        │ 
- │     2    │                                                     █│0s        │ 
+ │     Id   │  k/↑       Move up                                  █│atus      │ 
+ │>>   0    │  PgUp/PgDn Page up/down                             █│nning     │ 
+ │     1    │  Home/End  First/last task                          █│ccess     │ 
+ │     2    │                                                     █│iled (1)  │ 
  │          │Actions                                              █│          │ 
  │          │  Space     Toggle selection                         ║│          │ 
  │          │  Enter     View task logs                           ║│          │ 

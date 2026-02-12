@@ -7,10 +7,10 @@ expression: ui
  │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │     Id   Stat┌ Details (Esc to close) ──────────────────────┐    Duration  │ 
- │>>   0    Runn│ID: 0                                         │s/p 0s        │ 
- │     1    Succ│Status: Running                               │    0s        │ 
- │     2    Fail│Command: long_command --option1 value1        │    0s        │ 
+ │     Id   Path┌ Details (Esc to close) ──────────────────────┐  Status      │ 
+ │>>   0    /v/l│ID: 0                                         │  Running     │ 
+ │     1    /h/u│Status: Running                               │  Success     │ 
+ │     2    /tmp│Command: long_command --option1 value1        │  Failed (1)  │ 
  │              │--option2 value2 --option3 value3 --option4   │              │ 
  │              │value4 --option5 value5 --option6 value6      │              │ 
  │              │Path: /v/l/p/t/a/d/t/s/d/w/a/s/p/i/t/u/view   │              │ 

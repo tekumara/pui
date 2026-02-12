@@ -7,10 +7,10 @@ expression: ui
  │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────┐use | x: K│ 
  └──────────│  p         Pause task(s)                            ↑│──────────┘ 
  ┌ Tasks ───│  x         Kill task(s)                             ║│──────────┐ 
- │     Id   │  Backspace Remove task(s)                           ║│Duration  │ 
- │>>   0    │  d         Show task details                        ║│0s        │ 
- │     1    │                                                     ║│0s        │ 
- │     2    │Other                                                ║│0s        │ 
+ │     Id   │  Backspace Remove task(s)                           ║│atus      │ 
+ │>>   0    │  d         Show task details                        ║│nning     │ 
+ │     1    │                                                     ║│ccess     │ 
+ │     2    │Other                                                ║│iled (1)  │ 
  │          │  f         Filter tasks                             ║│          │ 
  │          │  s         Sort tasks                               ║│          │ 
  │          │  c         Edit config file                         ║│          │ 
