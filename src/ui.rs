@@ -274,16 +274,16 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
                 Row::new(vec![
                     Cell::from(indicator),
                     Cell::from(ft.id),
-                    Cell::from(ft.status),
-                    Cell::from(ft.command),
                     Cell::from(ft.path),
+                    Cell::from(ft.command),
                     Cell::from(ft.duration),
+                    Cell::from(ft.status),
                 ])
                 .style(style)
             })
             .collect();
 
-        let header = Row::new(vec![" ", "Id", "Status", "Command", "Path", "Duration"]).style(
+        let header = Row::new(vec![" ", "Id", "Path", "Command", "Duration", "Status"]).style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::Cyan),
@@ -292,10 +292,10 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
         let widths = [
             Constraint::Length(1),      // Select indicator
             Constraint::Length(4),      // Id
-            Constraint::Length(12),     // Status
-            Constraint::Percentage(20), // Command
-            Constraint::Percentage(80), // Path
+            Constraint::Percentage(70), // Path
+            Constraint::Percentage(30), // Command
             Constraint::Length(10),     // Duration
+            Constraint::Length(12),     // Status
         ];
 
         let task_table = Table::new(rows, widths)
