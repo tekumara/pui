@@ -106,7 +106,12 @@ pub fn format_task<'a>(id: usize, task: &'a Task, now: &jiff::Timestamp) -> Form
         id: id.to_string(),
         status: status_display(&task.status),
         command: command_basename,
-        path: tico::tico(&task.path.to_string_lossy()),
+        path: task
+            .path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .map(|name| format!("{}/", name))
+            .unwrap_or_else(|| task.path.to_string_lossy().into_owned()),
         end: end_str,
         duration: duration_str,
         full_command: &task.command,
@@ -299,7 +304,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             })
             .collect();
 
-        let header = Row::new(vec![" ", "Id", "Path", "Command", "End", "Duration", "Status"]).style(
+        let header = Row::new(vec![" ", "Id", "Path suffix", "Command", "End", "Duration", "Status"]).style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::Cyan),
