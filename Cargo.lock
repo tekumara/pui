@@ -1352,7 +1352,6 @@ dependencies = [
  "serde_json",
  "snap",
  "tempfile",
- "tico",
  "tokio",
  "toml",
 ]
@@ -2037,12 +2036,6 @@ checksum = "f60246a4944f24f6e018aa17cdeffb7818b76356965d03b07d6a9886e8962185"
 dependencies = [
  "cfg-if",
 ]
-
-[[package]]
-name = "tico"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9d73fbfe0205d9c15fb2768ac13d5bba2c39909bf326f5b36818aade6739464"
 
 [[package]]
 name = "time"

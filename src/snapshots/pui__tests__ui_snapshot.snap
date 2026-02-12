@@ -7,10 +7,10 @@ expression: ui
  │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
- │     Id   Path            Command         End        Duration   Status      │ 
- │>>   0    /tmp            sleep 60        -          0s         Running     │ 
- │     1    /h/user         echo 'hello'    00:00      0s         Success     │ 
- │     2    /tmp            false           00:00      0s         Failed (1)  │ 
+ │     Id   Path suffix     Command         End        Duration   Status      │ 
+ │>>   0    tmp/            sleep 60        -          0s         Running     │ 
+ │     1    user/           echo 'hello'    00:00      0s         Success     │ 
+ │     2    tmp/            false           00:00      0s         Failed (1)  │ 
  │                                                                            │ 
  │                                                                            │ 
  │                                                                            │ 
