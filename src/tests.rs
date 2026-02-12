@@ -107,6 +107,10 @@ impl PueueClientOps for MockPueueClient {
         Ok(())
     }
 
+    async fn enqueue_tasks(&mut self, _ids: Vec<usize>) -> Result<()> {
+        Ok(())
+    }
+
     async fn pause_tasks(&mut self, _ids: Vec<usize>) -> Result<()> {
         Ok(())
     }

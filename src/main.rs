@@ -588,30 +588,48 @@ impl<P: PueueClientOps> App<P> {
                         KeyCode::Char('r') => {
                             let target_ids = self.get_action_target_ids();
                             if !target_ids.is_empty() {
-                                // Separate tasks into those needing restart vs start
+                                // Separate tasks by status into appropriate actions
                                 let mut to_start = Vec::new();
                                 let mut to_restart = Vec::new();
+                                let mut to_enqueue = Vec::new();
 
                                 if let Some(state) = &self.state {
                                     for task_id in target_ids {
                                         if let Some(task) = state.tasks.get(&task_id) {
-                                            if matches!(task.status, TaskStatus::Done { .. }) {
-                                                to_restart.push(TaskToRestart {
-                                                    task_id,
-                                                    original_command: task.original_command.clone(),
-                                                    path: task.path.clone(),
-                                                    label: task.label.clone(),
-                                                    priority: task.priority,
-                                                });
-                                            } else {
-                                                to_start.push(task_id);
+                                            match &task.status {
+                                                TaskStatus::Done { .. } => {
+                                                    to_restart.push(TaskToRestart {
+                                                        task_id,
+                                                        original_command: task
+                                                            .original_command
+                                                            .clone(),
+                                                        path: task.path.clone(),
+                                                        label: task.label.clone(),
+                                                        priority: task.priority,
+                                                    });
+                                                }
+                                                TaskStatus::Stashed { .. } => {
+                                                    to_enqueue.push(task_id);
+                                                }
+                                                _ => {
+                                                    to_start.push(task_id);
+                                                }
                                             }
                                         }
                                     }
                                 }
 
                                 let mut had_error = false;
+                                if !to_enqueue.is_empty()
+                                    && let Err(e) =
+                                        self.pueue_client.enqueue_tasks(to_enqueue).await
+                                {
+                                    self.error_modal =
+                                        Some(format!("Failed to enqueue task(s): {}", e));
+                                    had_error = true;
+                                }
                                 if !to_start.is_empty()
+                                    && !had_error
                                     && let Err(e) = self.pueue_client.start_tasks(to_start).await
                                 {
                                     self.error_modal =
