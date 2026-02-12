@@ -11,6 +11,7 @@ pub(crate) trait PueueClientOps {
     async fn get_state(&mut self) -> Result<State>;
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn restart_tasks(&mut self, tasks: Vec<TaskToRestart>) -> Result<()>;
+    async fn enqueue_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
@@ -99,6 +100,22 @@ impl PueueClientOps for PueueClient {
                 tasks,
                 start_immediately: true,
                 stashed: false,
+            }))
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        let _ = self
+            .client
+            .receive_response()
+            .await
+            .map_err(|e| anyhow!("{:?}", e))?;
+        Ok(())
+    }
+
+    async fn enqueue_tasks(&mut self, ids: Vec<usize>) -> Result<()> {
+        self.client
+            .send_request(Request::Enqueue(EnqueueRequest {
+                tasks: TaskSelection::TaskIds(ids),
+                enqueue_at: None,
             }))
             .await
             .map_err(|e| anyhow!("{:?}", e))?;
