@@ -7,20 +7,20 @@ expression: ui
  │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────↑ 
- │     Id   Path                  Command              Duration   Status      ║ 
- │     7    /tmp                  sleep 7              -          Queued      ║ 
- │     8    /tmp                  sleep 8              -          Queued      ║ 
- │     9    /tmp                  sleep 9              -          Queued      ║ 
- │     10   /tmp                  sleep 10             -          Queued      ║ 
- │     11   /tmp                  sleep 11             -          Queued      ║ 
- │     12   /tmp                  sleep 12             -          Queued      ║ 
- │     13   /tmp                  sleep 13             -          Queued      ║ 
- │     14   /tmp                  sleep 14             -          Queued      █ 
- │     15   /tmp                  sleep 15             -          Queued      █ 
- │     16   /tmp                  sleep 16             -          Queued      █ 
- │     17   /tmp                  sleep 17             -          Queued      █ 
- │     18   /tmp                  sleep 18             -          Queued      █ 
- │>>   19   /tmp                  sleep 19             -          Queued      █ 
+ │     Id   Path            Command         End        Duration   Status      ║ 
+ │     7    /tmp            sleep 7         -          -          Queued      ║ 
+ │     8    /tmp            sleep 8         -          -          Queued      ║ 
+ │     9    /tmp            sleep 9         -          -          Queued      ║ 
+ │     10   /tmp            sleep 10        -          -          Queued      ║ 
+ │     11   /tmp            sleep 11        -          -          Queued      ║ 
+ │     12   /tmp            sleep 12        -          -          Queued      ║ 
+ │     13   /tmp            sleep 13        -          -          Queued      ║ 
+ │     14   /tmp            sleep 14        -          -          Queued      █ 
+ │     15   /tmp            sleep 15        -          -          Queued      █ 
+ │     16   /tmp            sleep 16        -          -          Queued      █ 
+ │     17   /tmp            sleep 17        -          -          Queued      █ 
+ │     18   /tmp            sleep 18        -          -          Queued      █ 
+ │>>   19   /tmp            sleep 19        -          -          Queued      █ 
  └────────────────────────────────────────────────────────────────────────────↓ 
  ┌────────────────────────────────────────────────────────────────────────────┐ 
  │Connected to Pueue daemon                                                   │ 
