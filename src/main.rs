@@ -563,10 +563,11 @@ impl<P: PueueClientOps> App<P> {
                             // Open config file in $EDITOR (or vim if $EDITOR is not set)
                             if let Some(config_path) = &self.config.config_path {
                                 let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
-                                terminal.clear()?;
-                                if let Err(e) = run_custom_command(
+                                if let Err(e) = exec::run_command(
+                                    terminal,
                                     &[editor.clone(), config_path.display().to_string()],
-                                    &std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/")),
+                                    &std::env::current_dir()
+                                        .unwrap_or_else(|_| std::path::PathBuf::from("/")),
                                 ) {
                                     self.error_modal = Some(format!("Failed to open config in {}: {}", editor, e));
                                 } else {
@@ -576,7 +577,6 @@ impl<P: PueueClientOps> App<P> {
                                         Err(e) => self.error_modal = Some(format!("Failed to reload config: {}", e)),
                                     }
                                 }
-                                terminal.clear()?;
                             } else {
                                 self.error_modal = Some("Config path not available".to_string());
                             }
@@ -694,15 +694,14 @@ impl<P: PueueClientOps> App<P> {
                                 if let Some(task_path) = self.get_current_task_path() {
                                     let cmd_args = cmd.cmd.clone();
                                     let cmd_name = name.clone();
-                                    // Clear terminal so the command doesn't paint over the TUI
-                                    terminal.clear()?;
-                                    if let Err(e) = run_custom_command(&cmd_args, &task_path) {
+                                    if let Err(e) = exec::run_command(
+                                        terminal,
+                                        &cmd_args,
+                                        &task_path,
+                                    ) {
                                         self.error_modal =
                                             Some(format!("Command '{}' failed: {}", cmd_name, e));
                                     }
-                                    // Clears terminal after the command has finished
-                                    // and forces a full redraw on next render
-                                    terminal.clear()?;
                                 } else {
                                     self.error_modal = Some("No task selected".to_string());
                                 }
@@ -829,28 +828,6 @@ impl<P: PueueClientOps> App<P> {
         None
     }
 
-}
-
-/// Run a custom command, temporarily suspending TUI mode.
-/// Disables raw mode so the command can use normal terminal I/O,
-/// then restores raw mode when done.
-pub fn run_custom_command(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
-    // Disable raw mode so command gets normal terminal I/O
-    // except in tests because we don't have the TUI and it messes with the output
-    #[cfg(not(test))]
-    {
-        crossterm::terminal::disable_raw_mode()?;
-    }
-
-    let result = exec::run_command_internal(cmd, working_dir);
-
-    // Restore raw mode which the TUI expects
-    #[cfg(not(test))]
-    {
-        crossterm::terminal::enable_raw_mode()?;
-    }
-
-    result
 }
 
 pub struct LogState {
