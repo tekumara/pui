@@ -1,8 +1,7 @@
 use anyhow::Result;
 use ratatui::DefaultTerminal;
 
-pub fn run_command_internal(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
-    // Run the command
+pub fn spawn_process(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
     let result = std::process::Command::new(&cmd[0])
         .args(&cmd[1..])
         .current_dir(working_dir)
@@ -37,7 +36,7 @@ pub fn run_command(
     terminal.clear()?;
     crossterm::terminal::disable_raw_mode()?;
 
-    let result = run_command_internal(cmd, working_dir);
+    let result = spawn_process(cmd, working_dir);
 
     // Re-enter alternate screen and enable raw mode for the TUI.
     crossterm::terminal::enable_raw_mode()?;
