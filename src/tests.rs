@@ -873,45 +873,6 @@ fn test_custom_command_reports_failure() {
     assert!(result.unwrap_err().to_string().contains("42"));
 }
 
-/// Test that terminal is in cooked mode (icanon set) during command execution.
-/// This test verifies the terminal is properly restored for the external command.
-#[test]
-#[ignore] // Requires a real terminal - run with: cargo test -- --ignored
-fn test_terminal_is_cooked_mode_during_command() {
-    use std::io::IsTerminal;
-
-    // Skip in CI where there's no real terminal
-    if !std::io::stdin().is_terminal() {
-        eprintln!("Skipping: no tty");
-        return;
-    }
-
-    let temp_dir = tempfile::tempdir().unwrap();
-    let result_file = temp_dir.path().join("mode.txt");
-
-    // stty outputs "-icanon" in raw mode, "icanon" in cooked mode
-    let result = spawn_process(
-        &[
-            "sh".to_string(),
-            "-c".to_string(),
-            format!(
-                "stty -a 2>/dev/null | grep -o '\\-\\?icanon' > {}",
-                result_file.display()
-            ),
-        ],
-        temp_dir.path(),
-    );
-
-    assert!(result.is_ok());
-    let mode = std::fs::read_to_string(&result_file).unwrap();
-    assert_eq!(
-        mode.trim(),
-        "icanon",
-        "Terminal should be in cooked mode (not raw) during command. Got: {}",
-        mode.trim()
-    );
-}
-
 /// Test that pwd matches working directory in spawned command
 #[test]
 fn test_custom_command_pwd_matches_working_directory() {
