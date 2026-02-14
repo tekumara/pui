@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crossterm::terminal::EnterAlternateScreen;
 use ratatui::DefaultTerminal;
 
 pub fn spawn_process(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
@@ -25,22 +26,32 @@ pub fn spawn_process(cmd: &[String], working_dir: &std::path::Path) -> Result<()
     }
 }
 
-/// Run a command, temporarily suspending TUI mode.
-/// Disables raw mode so the command can use normal terminal I/O,
-/// then restores raw mode when done.
+/// Run a command, temporarily leaving TUI mode, and re-enabling it afterwards
 pub fn run_command(
     terminal: &mut DefaultTerminal,
     cmd: &[String],
     working_dir: &std::path::Path,
 ) -> Result<()> {
+    // Clear the screen immediately so the user doesn't see TUI remnants while the command runs
     terminal.clear()?;
+
+    // TODO: move cursor to top left of screen
+
+    // Disable raw mode so the external command runs in a normal terminal environment
+    // (input is line-buffered, typed characters echo, Ctrl+C sends SIGINT, etc.)
     crossterm::terminal::disable_raw_mode()?;
 
     let result = spawn_process(cmd, working_dir);
 
-    // Re-enter alternate screen and enable raw mode for the TUI.
+    // Ratatui expects raw mode to be enabled, so we re-enable it here
     crossterm::terminal::enable_raw_mode()?;
+
+    // Clear the screen immediately, otherwise we may have still have changes on-screen from the command
     terminal.clear()?;
+
+    // Re-enter alternate screen, in case the command (eg: lazygit/tuicr) has left it.
+    // Ensures PgDn/PgUp is sent to our TUI and doesn't scroll back the terminal
+    crossterm::execute!(std::io::stdout(), EnterAlternateScreen)?;
 
     result
 }
