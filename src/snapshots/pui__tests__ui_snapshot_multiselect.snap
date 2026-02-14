@@ -4,7 +4,7 @@ expression: ui
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: K│ 
+ │r: Run | p: Pause | x: Kill | Enter: Logs | Backspace: Remove | Space: Selec│ 
  └────────────────────────────────────────────────────────────────────────────┘ 
  ┌ Tasks ─────────────────────────────────────────────────────────────────────┐ 
  │     Id   Path suffix     Command         End        Duration   Status      │ 
