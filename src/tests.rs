@@ -819,13 +819,13 @@ async fn test_ui_snapshot_multiselect() -> Result<()> {
 /// Test that custom command runs in the specified directory
 #[test]
 fn test_custom_command_runs_in_correct_directory() {
-    use crate::run_custom_command;
+    use crate::exec::run_command_internal;
 
     let temp_dir = tempfile::tempdir().unwrap();
     let marker_file = temp_dir.path().join("marker.txt");
 
     // Command that creates a file in the current directory
-    let result = run_custom_command(
+    let result = run_command_internal(
         &["touch".to_string(), "marker.txt".to_string()],
         temp_dir.path(),
     );
@@ -840,13 +840,13 @@ fn test_custom_command_runs_in_correct_directory() {
 /// Test that command arguments are passed correctly
 #[test]
 fn test_custom_command_passes_arguments() {
-    use crate::run_custom_command;
+    use crate::exec::run_command_internal;
 
     let temp_dir = tempfile::tempdir().unwrap();
     let output_file = temp_dir.path().join("output.txt");
 
     // Write specific content to verify args were passed
-    let result = run_custom_command(
+    let result = run_command_internal(
         &[
             "sh".to_string(),
             "-c".to_string(),
@@ -863,10 +863,10 @@ fn test_custom_command_passes_arguments() {
 /// Test that command failure is reported
 #[test]
 fn test_custom_command_reports_failure() {
-    use crate::run_custom_command;
+    use crate::exec::run_command_internal;
     use std::path::Path;
 
-    let result = run_custom_command(
+    let result = run_command_internal(
         &["sh".to_string(), "-c".to_string(), "exit 42".to_string()],
         Path::new("/tmp"),
     );
@@ -880,7 +880,7 @@ fn test_custom_command_reports_failure() {
 #[test]
 #[ignore] // Requires a real terminal - run with: cargo test -- --ignored
 fn test_terminal_is_cooked_mode_during_command() {
-    use crate::run_custom_command;
+    use crate::exec::run_command_internal;
     use std::io::IsTerminal;
 
     // Skip in CI where there's no real terminal
@@ -893,7 +893,7 @@ fn test_terminal_is_cooked_mode_during_command() {
     let result_file = temp_dir.path().join("mode.txt");
 
     // stty outputs "-icanon" in raw mode, "icanon" in cooked mode
-    let result = run_custom_command(
+    let result = run_command_internal(
         &[
             "sh".to_string(),
             "-c".to_string(),
@@ -918,12 +918,12 @@ fn test_terminal_is_cooked_mode_during_command() {
 /// Test that pwd matches working directory in spawned command
 #[test]
 fn test_custom_command_pwd_matches_working_directory() {
-    use crate::run_custom_command;
+    use crate::exec::run_command_internal;
 
     let temp_dir = tempfile::tempdir().unwrap();
     let output_file = temp_dir.path().join("pwd.txt");
 
-    let result = run_custom_command(
+    let result = run_command_internal(
         &[
             "sh".to_string(),
             "-c".to_string(),
