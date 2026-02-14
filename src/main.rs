@@ -2,6 +2,7 @@ mod config;
 mod pueue_client;
 #[cfg(test)]
 mod tests;
+mod exec;
 mod ui;
 
 use crate::config::{Config, CustomCommand, ParsedKey};
@@ -841,14 +842,7 @@ pub fn run_custom_command(cmd: &[String], working_dir: &std::path::Path) -> Resu
         crossterm::terminal::disable_raw_mode()?;
     }
 
-    // Run the command
-    let result = std::process::Command::new(&cmd[0])
-        .args(&cmd[1..])
-        .current_dir(working_dir)
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status();
+    let result = exec::run_command_internal(cmd, working_dir);
 
     // Restore raw mode which the TUI expects
     #[cfg(not(test))]
@@ -856,19 +850,7 @@ pub fn run_custom_command(cmd: &[String], working_dir: &std::path::Path) -> Resu
         crossterm::terminal::enable_raw_mode()?;
     }
 
-    match result {
-        Ok(status) => {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(anyhow::anyhow!(
-                    "Command exited with status: {}",
-                    status.code().unwrap_or(-1)
-                ))
-            }
-        }
-        Err(e) => Err(e.into()),
-    }
+    result
 }
 
 pub struct LogState {
