@@ -4,17 +4,17 @@ expression: ui
 ---
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
- │Space: Sel┌ Key Bindings (? or Esc to close) ────────────────────┐use | x: K│ 
- └──────────│  p         Pause task(s)                            ↑│──────────┘ 
- ┌ Tasks ───│  x         Kill task(s)                             ║│──────────┐ 
- │     Id   │  Backspace Remove task(s)                           ║│atus      │ 
- │>>   0    │  d         Show task details                        ║│nning     │ 
+ │r: Run | p┌ Key Bindings (? or Esc to close) ────────────────────┐ace: Selec│ 
+ └──────────│  Enter     View task logs                           ↑│──────────┘ 
+ ┌ Tasks ───│  Backspace Remove task(s)                           ║│──────────┐ 
+ │     Id   │  Space     Toggle selection                         ║│atus      │ 
+ │>>   0    │  ?         Show this help                           ║│nning     │ 
  │     1    │                                                     ║│ccess     │ 
  │     2    │Other                                                ║│iled (1)  │ 
+ │          │  d         Show task details                        ║│          │ 
  │          │  f         Filter tasks                             ║│          │ 
  │          │  s         Sort tasks                               ║│          │ 
  │          │  c         Edit config file                         ║│          │ 
- │          │  ?         Show this help                           ║│          │ 
  │          │  q         Quit                                     ║│          │ 
  │          │  Esc       Clear selection/filter                   █│          │ 
  │          │                                                     █│          │ 

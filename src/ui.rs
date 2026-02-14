@@ -173,18 +173,18 @@ pub fn build_help_text(
     help_text.push_str("  PgUp/PgDn Page up/down\n");
     help_text.push_str("  Home/End  First/last task\n");
     help_text.push_str("\nActions\n");
-    help_text.push_str("  Space     Toggle selection\n");
-    help_text.push_str("  Enter     View task logs\n");
     help_text.push_str("  r         Run/restart task(s)\n");
     help_text.push_str("  p         Pause task(s)\n");
     help_text.push_str("  x         Kill task(s)\n");
+    help_text.push_str("  Enter     View task logs\n");
     help_text.push_str("  Backspace Remove task(s)\n");
-    help_text.push_str("  d         Show task details\n");
+    help_text.push_str("  Space     Toggle selection\n");
+    help_text.push_str("  ?         Show this help\n");
     help_text.push_str("\nOther\n");
+    help_text.push_str("  d         Show task details\n");
     help_text.push_str("  f         Filter tasks\n");
     help_text.push_str("  s         Sort tasks\n");
     help_text.push_str("  c         Edit config file\n");
-    help_text.push_str("  ?         Show this help\n");
     help_text.push_str("  q         Quit\n");
     help_text.push_str("  Esc       Clear selection/filter\n");
 
@@ -255,7 +255,7 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("Space: Select | Enter: Logs | f: Filter | s: Sort | r: Run | p: Pause | x: Kill | Backspace: Remove | d: Details | c: Config | ?: Help | q: Quit")
+    let title = Paragraph::new("r: Run | p: Pause | x: Kill | Enter: Logs | Backspace: Remove | Space: Select | ?: Help")
         .block(title_block);
     f.render_widget(title, chunks[0]);
 
