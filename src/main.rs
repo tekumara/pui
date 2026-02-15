@@ -8,7 +8,7 @@ mod ui;
 use crate::config::{Config, CustomCommand, ParsedKey};
 
 use anyhow::Result;
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::stream::StreamExt;
 use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::TableState};
 use std::collections::HashSet;
@@ -424,6 +424,11 @@ impl<P: PueueClientOps> App<P> {
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('a')
+                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            self.select_all();
+                        }
                         KeyCode::Char('q') => self.quit(),
                         KeyCode::Esc => {
                             if !self.filter_text.is_empty() {
@@ -745,6 +750,14 @@ impl<P: PueueClientOps> App<P> {
         }
 
         Ok(())
+    }
+
+    /// Select all visible (filtered) tasks.
+    pub(crate) fn select_all(&mut self) {
+        let task_ids = self.get_filtered_task_ids();
+        for id in &task_ids {
+            self.selected_task_ids.insert(*id);
+        }
     }
 
     /// Get filtered and sorted task IDs
