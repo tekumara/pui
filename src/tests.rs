@@ -95,6 +95,17 @@ impl MockPueueClient {
 }
 
 impl PueueClientOps for MockPueueClient {
+    async fn new(&self) -> Result<Self> {
+        // We copy state so the streaming client sees the same tasks (e.g. stashed)
+        // as the original client. This perverts the interface — ideally `new` wouldn't
+        // take `&self`, but without a mock pueue server the streaming client has no
+        // other way to know about the current task state. If we mock the server in
+        // the future we could remove the `&self` parameter from the trait.
+        Ok(Self {
+            state: self.state.clone(),
+        })
+    }
+
     async fn get_state(&mut self) -> Result<State> {
         Ok(self.state.clone())
     }
@@ -123,7 +134,14 @@ impl PueueClientOps for MockPueueClient {
         Ok(())
     }
 
-    async fn start_log_stream(&mut self, _id: usize, _lines: Option<usize>) -> Result<String> {
+    async fn start_log_stream(&mut self, id: usize, _lines: Option<usize>) -> Result<String> {
+        // Simulate real pueue daemon: hangs forever for stashed tasks (no log file exists)
+        if let Some(task) = self.state.tasks.get(&id) {
+            if matches!(task.status, TaskStatus::Stashed { .. }) {
+                std::future::pending::<()>().await;
+                unreachable!();
+            }
+        }
         Ok("Log line 1\nLog line 2\nLog line 3".to_string())
     }
 
@@ -588,6 +606,81 @@ async fn test_ui_snapshot_log_view_end_key_then_down() -> Result<()> {
         content_lines[1].contains("ZZ"),
         "Expected last visible content line to contain the end marker, but got: {:?}",
         content_lines[1]
+    );
+
+    insta::assert_snapshot!(ui);
+
+    Ok(())
+}
+
+/// Viewing logs on a stashed task should show an empty log view, not hang.
+/// The pueue daemon hangs on stream requests for tasks that have never run,
+/// so the app must skip the stream and show empty logs instead.
+#[tokio::test]
+async fn test_log_view_stashed_task_shows_empty() -> Result<()> {
+    use crate::App;
+    use std::time::Duration;
+
+    // Set TZ to UTC for consistent snapshots across environments
+    unsafe {
+        std::env::set_var("TZ", "UTC");
+    }
+
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    // Create a stashed task (has never run, so no logs)
+    let stashed_task = Task {
+        id: 0,
+        created_at: now,
+        original_command: "sleep 100".to_string(),
+        command: "sleep 100".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Stashed { enqueue_at: None },
+    };
+    state.tasks.insert(0, stashed_task);
+
+    let mock_client = MockPueueClient {
+        state: state.clone(),
+    };
+    let mut app = App::new(mock_client, Config::default());
+    app.state = Some(state);
+
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Initial draw to sync selection
+    terminal.draw(|f| app.draw(f))?;
+    assert_eq!(app.current_task_id, Some(0));
+
+    // Send Enter key through the real on_key_event handler.
+    // The mock's start_log_stream hangs for stashed tasks (like the real daemon),
+    // so this must complete without hanging — the app should skip the stream.
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    tokio::time::timeout(Duration::from_secs(1), app.on_key_event(enter, &mut terminal))
+        .await
+        .expect("on_key_event should not hang for a stashed task")
+        .expect("on_key_event should not return an error");
+
+    // Redraw with the new app mode
+    terminal.draw(|f| app.draw(f))?;
+
+    let ui = buffer_contents(terminal.backend().buffer());
+
+    // The log view should be empty — no log content for a stashed task
+    assert!(
+        !ui.contains("Log line"),
+        "Stashed task log view should be empty, but found log content"
+    );
+    // Should still show the log view border/title
+    assert!(
+        ui.contains("Task Log"),
+        "Log view should be displayed with its title"
     );
 
     insta::assert_snapshot!(ui);
