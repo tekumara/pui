@@ -35,7 +35,12 @@ pub fn run_command(
     // Clear the screen immediately so the user doesn't see TUI remnants while the command runs
     terminal.clear()?;
 
-    // TODO: move cursor to top left of screen
+    // Move cursor to top-left so the command's output (eg: bash) starts on first line, and
+    // not were the cursor is at the time (ie: on the row in the tasks table)
+    crossterm::execute!(std::io::stdout(), crossterm::cursor::MoveTo(0, 0))?;
+
+    // NB: we deliberately stay in the alternate screen, rather than leaving it, to avoid
+    // polluting the main screen and terminal buffer (we could clear it, but that would leave a blank hole)
 
     // Disable raw mode so the external command runs in a normal terminal environment
     // (input is line-buffered, typed characters echo, Ctrl+C sends SIGINT, etc.)
