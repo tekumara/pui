@@ -312,11 +312,7 @@ impl<P: PueueClientOps> App<P> {
 
         match &mut self.app_mode {
             AppMode::Filter => match key.code {
-                KeyCode::Esc => {
-                    next_mode = Some(AppMode::Normal);
-                    self.filter_text.clear();
-                }
-                KeyCode::Enter => {
+                KeyCode::Esc | KeyCode::Enter => {
                     next_mode = Some(AppMode::Normal);
                 }
                 KeyCode::Backspace => {
@@ -430,10 +426,10 @@ impl<P: PueueClientOps> App<P> {
                     match key.code {
                         KeyCode::Char('q') => self.quit(),
                         KeyCode::Esc => {
-                            if !self.selected_task_ids.is_empty() {
-                                self.selected_task_ids.clear();
-                            } else if !self.filter_text.is_empty() {
+                            if !self.filter_text.is_empty() {
                                 self.filter_text.clear();
+                            } else if !self.selected_task_ids.is_empty() {
+                                self.selected_task_ids.clear();
                             }
                         }
                         KeyCode::Char(' ') => {
