@@ -445,6 +445,20 @@ impl<P: PueueClientOps> App<P> {
                                     self.selected_task_ids.insert(task_id);
                                 }
                             }
+                            // Move to the next line, wrapping around
+                            let task_ids = self.get_filtered_task_ids();
+                            let i = match self.table_state.selected() {
+                                Some(i) if !task_ids.is_empty() => {
+                                    if i >= task_ids.len().saturating_sub(1) {
+                                        0
+                                    } else {
+                                        i + 1
+                                    }
+                                }
+                                _ => 0,
+                            };
+                            self.table_state.select(Some(i));
+                            self.update_current_task_id();
                         }
                         KeyCode::Enter => {
                             if let Some(i) = self.table_state.selected() {
