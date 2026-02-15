@@ -90,6 +90,8 @@ pub(crate) struct App<P: PueueClientOps> {
     pub(crate) config: Config,
     /// Scroll offset for help modal
     help_scroll_offset: u16,
+    /// Streaming client for log mode - separate connection so state polling continues
+    stream_client: Option<P>,
 }
 
 impl<P: PueueClientOps> App<P> {
@@ -114,6 +116,7 @@ impl<P: PueueClientOps> App<P> {
             error_modal: None,
             config,
             help_scroll_offset: 0,
+            stream_client: None,
         }
     }
 
@@ -146,8 +149,8 @@ impl<P: PueueClientOps> App<P> {
                 // Stream logs when in Log mode with an active stream
                 // Chunks are produced once every 1000ms by the pueue client
                 chunk_result = async {
-                    if let AppMode::Log(log_state) = &mut self.app_mode
-                        && let Some(stream_client) = &mut log_state.stream_client
+                    if matches!(self.app_mode, AppMode::Log(_))
+                        && let Some(stream_client) = &mut self.stream_client
                     {
                         return Some(stream_client.receive_stream_chunk().await);
                     }
@@ -172,11 +175,11 @@ impl<P: PueueClientOps> App<P> {
                             }
                             Ok(None) => {
                                 // Stream closed (task finished)
-                                log_state.stream_client = None;
+                                self.stream_client = None;
                             }
                             Err(_) => {
                                 // Error receiving chunk, close the stream
-                                log_state.stream_client = None;
+                                self.stream_client = None;
                             }
                         }
                     }
@@ -307,7 +310,11 @@ impl<P: PueueClientOps> App<P> {
     }
 
     /// Handles the key events and updates the state of [`App`].
-    async fn on_key_event(&mut self, key: KeyEvent, terminal: &mut DefaultTerminal) -> Result<()> {
+    async fn on_key_event<B: ratatui::backend::Backend<Error: Send + Sync + 'static>>(
+        &mut self,
+        key: KeyEvent,
+        terminal: &mut ratatui::Terminal<B>,
+    ) -> Result<()> {
         let mut next_mode = None;
 
         match &mut self.app_mode {
@@ -353,6 +360,7 @@ impl<P: PueueClientOps> App<P> {
 
                 if key.code == KeyCode::Esc {
                     // Drop the stream client when exiting log mode
+                    self.stream_client = None;
                     next_mode = Some(AppMode::Normal);
                 } else {
                     log_state.handle_key(key, page_height, page_width);
@@ -466,14 +474,32 @@ impl<P: PueueClientOps> App<P> {
                                 let task_ids = self.get_filtered_task_ids();
                                 if let Some(id) = task_ids.get(i) {
                                     let task_id = *id;
-                                    // Create streaming client and start the stream
-                                    match Self::start_log_stream(task_id).await {
-                                        Ok(log_state) => {
-                                            next_mode = Some(AppMode::Log(log_state));
-                                        }
-                                        Err(e) => {
-                                            self.error_modal =
-                                                Some(format!("Failed to start log stream: {}", e));
+                                    // Stashed tasks have never run, so there are no logs to stream.
+                                    // The pueue daemon hangs on stream requests for such tasks,
+                                    // so skip the stream and show an empty log view instead.
+                                    let is_stashed = self
+                                        .state
+                                        .as_ref()
+                                        .and_then(|s| s.tasks.get(&task_id))
+                                        .is_some_and(|t| {
+                                            matches!(t.status, TaskStatus::Stashed { .. })
+                                        });
+
+                                    if is_stashed {
+                                        next_mode =
+                                            Some(AppMode::Log(LogState::new(task_id)));
+                                    } else {
+                                        // Create streaming client and start the stream
+                                        match self.start_log_stream(task_id).await {
+                                            Ok(log_state) => {
+                                                next_mode = Some(AppMode::Log(log_state));
+                                            }
+                                            Err(e) => {
+                                                self.error_modal = Some(format!(
+                                                    "Failed to start log stream: {}",
+                                                    e
+                                                ));
+                                            }
                                         }
                                     }
                                 }
@@ -826,17 +852,19 @@ impl<P: PueueClientOps> App<P> {
         self.running = false;
     }
 
-    /// Create a new streaming client and start the log stream
-    async fn start_log_stream(task_id: usize) -> Result<LogState> {
-        let mut stream_client = PueueClient::new().await?;
+    /// Create a new streaming client and start the log stream.
+    /// Stores the streaming client in `self.stream_client`.
+    async fn start_log_stream(&mut self, task_id: usize) -> Result<LogState> {
+        let mut stream_client = self.pueue_client.new().await?;
         let initial_logs = stream_client.start_log_stream(task_id, None).await?;
+
+        self.stream_client = Some(stream_client);
 
         let mut log_state = LogState {
             task_id,
             logs: initial_logs,
             scroll_offset: 0,
             autoscroll: true,
-            stream_client: Some(stream_client),
         };
 
         // Scroll to end of initial logs
@@ -876,8 +904,6 @@ pub struct LogState {
     pub logs: String,
     pub scroll_offset: u16,
     pub autoscroll: bool,
-    /// Streaming client - None if stream has closed
-    pub stream_client: Option<PueueClient>,
 }
 
 impl std::fmt::Debug for LogState {
@@ -887,10 +913,6 @@ impl std::fmt::Debug for LogState {
             .field("logs", &format!("({} bytes)", self.logs.len()))
             .field("scroll_offset", &self.scroll_offset)
             .field("autoscroll", &self.autoscroll)
-            .field(
-                "stream_client",
-                &self.stream_client.as_ref().map(|_| "Some(...)"),
-            )
             .finish()
     }
 }
@@ -902,7 +924,6 @@ impl LogState {
             logs: String::new(),
             scroll_offset: 0,
             autoscroll: true,
-            stream_client: None,
         }
     }
 

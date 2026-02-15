@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::terminal::EnterAlternateScreen;
-use ratatui::DefaultTerminal;
+use ratatui::backend::Backend;
 
 pub fn spawn_process(cmd: &[String], working_dir: &std::path::Path) -> Result<()> {
     let result = std::process::Command::new(&cmd[0])
@@ -27,8 +27,8 @@ pub fn spawn_process(cmd: &[String], working_dir: &std::path::Path) -> Result<()
 }
 
 /// Run a command, temporarily leaving TUI mode, and re-enabling it afterwards
-pub fn run_command(
-    terminal: &mut DefaultTerminal,
+pub fn run_command<B: Backend<Error: Send + Sync + 'static>>(
+    terminal: &mut ratatui::Terminal<B>,
     cmd: &[String],
     working_dir: &std::path::Path,
 ) -> Result<()> {
