@@ -5,12 +5,12 @@ expression: ui
                                                                                 
  ┌ Pui - Pueue TUI ───────────────────────────────────────────────────────────┐ 
  │r: Run | p┌ Key Bindings (? or Esc to close) ────────────────────┐ace: Selec│ 
- └──────────│  Enter     View task logs                           ↑│──────────┘ 
- ┌ Tasks ───│  Backspace Remove task(s)                           ║│──────────┐ 
- │     Id   │  Space     Toggle selection                         ║│atus      │ 
- │>>   0    │  ?         Show this help                           ║│nning     │ 
- │     1    │                                                     ║│ccess     │ 
- │     2    │Other                                                ║│iled (1)  │ 
+ └──────────│  Backspace Remove task(s)                           ↑│──────────┘ 
+ ┌ Tasks ───│  Space     Toggle selection                         ║│──────────┐ 
+ │     Id   │  ?         Show this help                           ║│atus      │ 
+ │>>   0    │                                                     ║│nning     │ 
+ │     1    │Other                                                ║│ccess     │ 
+ │     2    │  Ctrl+a    Select all tasks                         ║│iled (1)  │ 
  │          │  d         Show task details                        ║│          │ 
  │          │  f         Filter tasks                             ║│          │ 
  │          │  s         Sort tasks                               ║│          │ 

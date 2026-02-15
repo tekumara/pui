@@ -181,6 +181,7 @@ pub fn build_help_text(
     help_text.push_str("  Space     Toggle selection\n");
     help_text.push_str("  ?         Show this help\n");
     help_text.push_str("\nOther\n");
+    help_text.push_str("  Ctrl+a    Select all tasks\n");
     help_text.push_str("  d         Show task details\n");
     help_text.push_str("  f         Filter tasks\n");
     help_text.push_str("  s         Sort tasks\n");

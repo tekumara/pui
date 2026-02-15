@@ -818,6 +818,150 @@ async fn test_ui_snapshot_multiselect() -> Result<()> {
     Ok(())
 }
 
+/// Test select_all selects all visible tasks
+#[tokio::test]
+async fn test_select_all_selects_all_tasks() -> Result<()> {
+    use crate::App;
+
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    // Create 4 tasks
+    for id in 0..4 {
+        let task = Task {
+            id,
+            created_at: now,
+            original_command: format!("task_{}", id),
+            command: format!("task_{}", id),
+            path: PathBuf::from("/tmp"),
+            envs: HashMap::new(),
+            group: "default".to_string(),
+            dependencies: vec![],
+            priority: 0,
+            label: None,
+            status: TaskStatus::Queued { enqueued_at: now },
+        };
+        state.tasks.insert(id, task);
+    }
+
+    let mock_client = MockPueueClient {
+        state: state.clone(),
+    };
+    let mut app = App::new(mock_client, Config::default());
+    app.state = Some(state);
+
+    app.table_state.select(Some(0));
+    app.update_current_task_id();
+    assert!(app.selected_task_ids.is_empty());
+
+    // Ctrl+A: select all
+    app.select_all();
+    assert_eq!(app.selected_task_ids.len(), 4);
+    for id in 0..4 {
+        assert!(
+            app.selected_task_ids.contains(&id),
+            "Task {} should be selected",
+            id
+        );
+    }
+
+    // Calling again still has all selected
+    app.select_all();
+    assert_eq!(app.selected_task_ids.len(), 4);
+
+    Ok(())
+}
+
+/// Test select_all with filter only affects visible tasks
+#[tokio::test]
+async fn test_select_all_filtered_only_affects_visible() -> Result<()> {
+    use crate::App;
+
+    let mut state = State::default();
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+
+    // Task 0: "sleep 60" running
+    let task0 = Task {
+        id: 0,
+        created_at: now,
+        original_command: "sleep 60".to_string(),
+        command: "sleep 60".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Running {
+            enqueued_at: now,
+            start: now,
+        },
+    };
+
+    // Task 1: "echo hello" success
+    let task1 = Task {
+        id: 1,
+        created_at: now,
+        original_command: "echo hello".to_string(),
+        command: "echo hello".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Done {
+            enqueued_at: now,
+            start: now,
+            end: now,
+            result: TaskResult::Success,
+        },
+    };
+
+    // Task 2: "sleep 10" running
+    let task2 = Task {
+        id: 2,
+        created_at: now,
+        original_command: "sleep 10".to_string(),
+        command: "sleep 10".to_string(),
+        path: PathBuf::from("/tmp"),
+        envs: HashMap::new(),
+        group: "default".to_string(),
+        dependencies: vec![],
+        priority: 0,
+        label: None,
+        status: TaskStatus::Running {
+            enqueued_at: now,
+            start: now,
+        },
+    };
+
+    state.tasks.insert(0, task0);
+    state.tasks.insert(1, task1);
+    state.tasks.insert(2, task2);
+
+    let mock_client = MockPueueClient {
+        state: state.clone(),
+    };
+    let mut app = App::new(mock_client, Config::default());
+    app.state = Some(state);
+
+    // Filter to only show "Running" tasks (tasks 0 and 2)
+    app.filter_text = "Running".to_string();
+
+    app.table_state.select(Some(0));
+    app.update_current_task_id();
+
+    // Select all visible — should select only tasks 0 and 2
+    app.select_all();
+    assert_eq!(app.selected_task_ids.len(), 2);
+    assert!(app.selected_task_ids.contains(&0));
+    assert!(!app.selected_task_ids.contains(&1));
+    assert!(app.selected_task_ids.contains(&2));
+
+    Ok(())
+}
+
 // Custom command tests
 use crate::exec::spawn_process;
 
