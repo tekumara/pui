@@ -119,6 +119,13 @@ fn custom_command_restores_tui_screen_and_raw_mode() {
     let sut_end = output.find("SUT_END").expect("Missing SUT_END marker");
     let sut_output = &output[sut_start..sut_end];
 
+    // run_command() should move cursor to top-left before running the command.
+    assert!(
+        sut_output.contains("\x1b[1;1H"),
+        "did not move cursor to top-left\nSUT output: {}",
+        escape_bytes(sut_output.as_bytes()),
+    );
+
     // run_command() should re-enter alternate screen.
     assert!(
         sut_output.contains("\x1b[?1049h"),
