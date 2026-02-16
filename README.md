@@ -31,3 +31,28 @@ To start pui:
 ```bash
 ./target/release/pui
 ```
+
+## Configuration
+
+Pui is configured via a TOML file located at the platform-specific config directory:
+
+| Platform    | Path                                                              |
+| ----------- | ----------------------------------------------------------------- |
+| Linux/macOS | `$XDG_CONFIG_HOME/pui/config.toml` or `~/.config/pui/config.toml` |
+| Windows     | `%APPDATA%\pui\config.toml`                                       |
+
+### Example
+
+```toml
+[custom_commands]
+lazygit = { key = "g", cmd = ["lazygit"] }
+editor = { key = "ctrl+e", cmd = ["nvim", "."] }
+shell = { key = "alt+s", cmd = ["sh", "-c", "$SHELL"] }
+```
+
+### Custom Commands
+
+Custom commands are key-bound commands that run in the selected task's working directory. Each command has:
+
+- **key** — the key binding to trigger the command (e.g., `"g"`, `"ctrl+e"`, `"alt+r"`, `"opt+q"`)
+- **cmd** — the command and arguments to run as an array (e.g., `["lazygit", "log"]`)
