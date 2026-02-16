@@ -5,7 +5,6 @@ use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
 use pueue_lib::settings::Settings;
 use pueue_lib::state::State;
-use pueue_lib::tls::load_certificate;
 
 pub(crate) trait PueueClientOps: Sized {
     /// Create a new, independent client connection (e.g. for streaming).
@@ -37,19 +36,10 @@ impl PueueClient {
         let secret = read_shared_secret(&settings.shared.shared_secret_path())
             .map_err(|e| anyhow!("Failed to read shared secret: {:?}", e))?;
 
-        let connection_settings = if settings.shared.use_unix_socket {
-            ConnectionSettings::UnixSocket {
-                path: settings.shared.unix_socket_path(),
-            }
-        } else {
-            let cert = load_certificate(&settings.shared.daemon_cert())
-                .map_err(|e| anyhow!("Failed to load daemon certificate: {:?}", e))?;
-            ConnectionSettings::TlsTcpSocket {
-                host: settings.shared.host.clone(),
-                port: settings.shared.port.clone(),
-                certificate: cert,
-            }
-        };
+        let connection_settings: ConnectionSettings = settings
+            .shared
+            .try_into()
+            .map_err(|e: pueue_lib::error::Error| anyhow!("{:?}", e))?;
 
         let client = Client::new(connection_settings, &secret, false)
             .await
