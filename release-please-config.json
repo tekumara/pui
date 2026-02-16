@@ -1,0 +1,19 @@
+{
+  "prerelease": true,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "chore", "section": "Chores" },
+    { "type": "refactor", "section": "Code Refactoring", "hidden": true },
+    { "type": "ci", "section": "Builds" },
+    { "type": "perf", "section": "Performance Improvements" }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "rust"
+    }
+  },
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}
