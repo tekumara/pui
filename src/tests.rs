@@ -3,13 +3,7 @@ use chrono::{Local, TimeZone};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
-use ratatui::{
-    Terminal,
-    backend::TestBackend,
-    buffer::Buffer,
-    layout::Rect,
-    widgets::TableState,
-};
+use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Rect, widgets::TableState};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -662,10 +656,13 @@ async fn test_log_view_stashed_task_shows_empty() -> Result<()> {
     // The mock's start_log_stream hangs for stashed tasks (like the real daemon),
     // so this must complete without hanging — the app should skip the stream.
     let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-    tokio::time::timeout(Duration::from_secs(1), app.on_key_event(enter, &mut terminal))
-        .await
-        .expect("on_key_event should not hang for a stashed task")
-        .expect("on_key_event should not return an error");
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        app.on_key_event(enter, &mut terminal),
+    )
+    .await
+    .expect("on_key_event should not hang for a stashed task")
+    .expect("on_key_event should not return an error");
 
     // Redraw with the new app mode
     terminal.draw(|f| app.draw(f))?;
@@ -1061,7 +1058,6 @@ use crate::exec::spawn_process;
 /// Test that custom command runs in the specified directory
 #[test]
 fn test_custom_command_runs_in_correct_directory() {
-
     let temp_dir = tempfile::tempdir().unwrap();
     let marker_file = temp_dir.path().join("marker.txt");
 
@@ -1081,7 +1077,6 @@ fn test_custom_command_runs_in_correct_directory() {
 /// Test that command arguments are passed correctly
 #[test]
 fn test_custom_command_passes_arguments() {
-
     let temp_dir = tempfile::tempdir().unwrap();
     let output_file = temp_dir.path().join("output.txt");
 
@@ -1117,7 +1112,6 @@ fn test_custom_command_reports_failure() {
 /// Test that pwd matches working directory in spawned command
 #[test]
 fn test_custom_command_pwd_matches_working_directory() {
-
     let temp_dir = tempfile::tempdir().unwrap();
     let output_file = temp_dir.path().join("pwd.txt");
 

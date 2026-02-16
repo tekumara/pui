@@ -82,7 +82,10 @@ impl Config {
     /// Linux/macOS: $XDG_CONFIG_HOME/pui/config.toml (fallback: ~/.config/pui/config.toml)
     /// Windows: %APPDATA%\pui\config.toml
     pub fn load() -> Result<Self> {
-        let config_path = choose_base_strategy()?.config_dir().join("pui").join("config.toml");
+        let config_path = choose_base_strategy()?
+            .config_dir()
+            .join("pui")
+            .join("config.toml");
         Self::load_from_path(&config_path)
     }
 

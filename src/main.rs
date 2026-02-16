@@ -1,8 +1,8 @@
 mod config;
+mod exec;
 mod pueue_client;
 #[cfg(test)]
 mod tests;
-mod exec;
 mod ui;
 
 use crate::config::{Config, CustomCommand, ParsedKey};
@@ -370,11 +370,8 @@ impl<P: PueueClientOps> App<P> {
             }
             AppMode::Help => {
                 let terminal_size = crossterm::terminal::size()?;
-                let modal_area = ui::centered_rect(
-                    70,
-                    80,
-                    Rect::new(0, 0, terminal_size.0, terminal_size.1),
-                );
+                let modal_area =
+                    ui::centered_rect(70, 80, Rect::new(0, 0, terminal_size.0, terminal_size.1));
                 let content_height = modal_area.height.saturating_sub(2);
                 let content_width = modal_area.width.saturating_sub(2).max(1);
                 let line_count = ui::help_modal_line_count(
@@ -432,9 +429,7 @@ impl<P: PueueClientOps> App<P> {
                     }
                 } else {
                     match key.code {
-                        KeyCode::Char('a')
-                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                        {
+                        KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.select_all();
                         }
                         KeyCode::Char('q') => self.quit(),
@@ -486,8 +481,7 @@ impl<P: PueueClientOps> App<P> {
                                         });
 
                                     if is_stashed {
-                                        next_mode =
-                                            Some(AppMode::Log(LogState::new(task_id)));
+                                        next_mode = Some(AppMode::Log(LogState::new(task_id)));
                                     } else {
                                         // Create streaming client and start the stream
                                         match self.start_log_stream(task_id).await {
@@ -603,19 +597,24 @@ impl<P: PueueClientOps> App<P> {
                         KeyCode::Char('c') => {
                             // Open config file in $EDITOR (or vim if $EDITOR is not set)
                             if let Some(config_path) = &self.config.config_path {
-                                let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+                                let editor =
+                                    std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
                                 if let Err(e) = exec::run_command(
                                     terminal,
                                     &[editor.clone(), config_path.display().to_string()],
                                     &std::env::current_dir()
                                         .unwrap_or_else(|_| std::path::PathBuf::from("/")),
                                 ) {
-                                    self.error_modal = Some(format!("Failed to open config in {}: {}", editor, e));
+                                    self.error_modal =
+                                        Some(format!("Failed to open config in {}: {}", editor, e));
                                 } else {
                                     // Reload config after editing
                                     match Config::load() {
                                         Ok(new_config) => self.config = new_config,
-                                        Err(e) => self.error_modal = Some(format!("Failed to reload config: {}", e)),
+                                        Err(e) => {
+                                            self.error_modal =
+                                                Some(format!("Failed to reload config: {}", e))
+                                        }
                                     }
                                 }
                             } else {
@@ -753,11 +752,9 @@ impl<P: PueueClientOps> App<P> {
                                 if let Some(task_path) = self.get_current_task_path() {
                                     let cmd_args = cmd.cmd.clone();
                                     let cmd_name = name.clone();
-                                    if let Err(e) = exec::run_command(
-                                        terminal,
-                                        &cmd_args,
-                                        &task_path,
-                                    ) {
+                                    if let Err(e) =
+                                        exec::run_command(terminal, &cmd_args, &task_path)
+                                    {
                                         self.error_modal =
                                             Some(format!("Command '{}' failed: {}", cmd_name, e));
                                     }
@@ -896,7 +893,6 @@ impl<P: PueueClientOps> App<P> {
         }
         None
     }
-
 }
 
 pub struct LogState {
