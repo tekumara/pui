@@ -256,8 +256,10 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
     let title_block = Block::default()
         .borders(Borders::ALL)
         .title(" Pui - Pueue TUI ");
-    let title = Paragraph::new("r: Run | p: Pause | x: Kill | Enter: Logs | Backspace: Remove | Space: Select | ?: Help")
-        .block(title_block);
+    let title = Paragraph::new(
+        "r: Run | p: Pause | x: Kill | Enter: Logs | Backspace: Remove | Space: Select | ?: Help",
+    )
+    .block(title_block);
     f.render_widget(title, chunks[0]);
 
     // Use full width for the table (chunks[1])
@@ -305,7 +307,16 @@ pub fn draw(f: &mut Frame, ui_state: &mut UiState) {
             })
             .collect();
 
-        let header = Row::new(vec![" ", "Id", "Path suffix", "Command", "End", "Duration", "Status"]).style(
+        let header = Row::new(vec![
+            " ",
+            "Id",
+            "Path suffix",
+            "Command",
+            "End",
+            "Duration",
+            "Status",
+        ])
+        .style(
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::Cyan),

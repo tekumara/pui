@@ -34,10 +34,7 @@ fn open_pty() -> (std::fs::File, i32) {
     let master_fd = unsafe { libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
     assert!(master_fd >= 0, "Failed to open PTY");
     assert!(unsafe { libc::grantpt(master_fd) } == 0, "grantpt failed");
-    assert!(
-        unsafe { libc::unlockpt(master_fd) } == 0,
-        "unlockpt failed"
-    );
+    assert!(unsafe { libc::unlockpt(master_fd) } == 0, "unlockpt failed");
     let slave_name = unsafe { libc::ptsname(master_fd) };
     assert!(!slave_name.is_null(), "ptsname failed");
     let slave_fd = unsafe {
