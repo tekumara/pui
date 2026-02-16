@@ -1081,14 +1081,20 @@ fn test_custom_command_passes_arguments() {
     let output_file = temp_dir.path().join("output.txt");
 
     // Write specific content to verify args were passed
-    let result = spawn_process(
-        &[
-            "sh".to_string(),
-            "-c".to_string(),
-            format!("echo 'hello world' > {}", output_file.display()),
-        ],
-        temp_dir.path(),
-    );
+    #[cfg(not(windows))]
+    let cmd = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        format!("echo 'hello world' > {}", output_file.display()),
+    ];
+    #[cfg(windows)]
+    let cmd = vec![
+        "cmd".to_string(),
+        "/C".to_string(),
+        format!("echo hello world > {}", output_file.display()),
+    ];
+
+    let result = spawn_process(&cmd, temp_dir.path());
 
     assert!(result.is_ok());
     let content = std::fs::read_to_string(&output_file).unwrap();
@@ -1098,12 +1104,18 @@ fn test_custom_command_passes_arguments() {
 /// Test that command failure is reported
 #[test]
 fn test_custom_command_reports_failure() {
-    use std::path::Path;
+    let temp_dir = tempfile::tempdir().unwrap();
 
-    let result = spawn_process(
-        &["sh".to_string(), "-c".to_string(), "exit 42".to_string()],
-        Path::new("/tmp"),
-    );
+    #[cfg(not(windows))]
+    let cmd = vec!["sh".to_string(), "-c".to_string(), "exit 42".to_string()];
+    #[cfg(windows)]
+    let cmd = vec![
+        "cmd".to_string(),
+        "/C".to_string(),
+        "exit /b 42".to_string(),
+    ];
+
+    let result = spawn_process(&cmd, temp_dir.path());
 
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("42"));
@@ -1115,14 +1127,21 @@ fn test_custom_command_pwd_matches_working_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
     let output_file = temp_dir.path().join("pwd.txt");
 
-    let result = spawn_process(
-        &[
-            "sh".to_string(),
-            "-c".to_string(),
-            format!("pwd > {}", output_file.display()),
-        ],
-        temp_dir.path(),
-    );
+    // On Unix, `pwd` prints the working directory; on Windows, `cd` does the same
+    #[cfg(not(windows))]
+    let cmd = vec![
+        "sh".to_string(),
+        "-c".to_string(),
+        format!("pwd > {}", output_file.display()),
+    ];
+    #[cfg(windows)]
+    let cmd = vec![
+        "cmd".to_string(),
+        "/C".to_string(),
+        format!("cd > {}", output_file.display()),
+    ];
+
+    let result = spawn_process(&cmd, temp_dir.path());
 
     assert!(result.is_ok());
     let pwd = std::fs::read_to_string(&output_file).unwrap();
