@@ -1,6 +1,6 @@
 # Pui
 
-A live, interactive terminal dashboard for tasks (ie: background processes) managed by [Pueue](https://github.com/nukesor/pueue). Watch tasks run, stream their logs, filter and sort the task list, and run custom commands — all without leaving your terminal.
+A live, interactive terminal dashboard for tasks (ie: non-interactive background processes) managed by [Pueue](https://github.com/nukesor/pueue). Watch tasks run, stream their logs, filter and sort the task list, and run custom commands — all without leaving your terminal.
 
 ![demo](docs/demo.gif)
 
