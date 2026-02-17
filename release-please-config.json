@@ -7,6 +7,8 @@
     { "type": "fix", "section": "Bug Fixes" },
     { "type": "chore", "section": "Chores" },
     { "type": "refactor", "section": "Code Refactoring", "hidden": true },
+    { "type": "style", "section": "Styles"},
+    { "type": "test", "section": "Tests"},
     { "type": "ci", "section": "Builds" },
     { "type": "perf", "section": "Performance Improvements" }
   ],
