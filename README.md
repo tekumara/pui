@@ -14,22 +14,34 @@ A live, interactive terminal dashboard for tasks (ie: non-interactive background
 - **Multi-select** — toggle selection on multiple tasks then apply actions to all selected tasks at once
 - **Custom commands** — define key-bound commands that run in the selected task's working directory (e.g., launch lazygit, an editor, or shell)
 
+## Pre-requisites
+
+[Install Pueue](https://github.com/Nukesor/pueue#installation).
+
 ## Installation
 
+Download the [latest Github release](https://github.com/tekumara/pui/releases/latest) manually, or using [eget](https://github.com/zyedidia/eget):
+
 ```bash
-cargo build --release
+eget tekumara/pui
 ```
 
 ## Usage
 
 Make sure the `pueued` daemon is running before starting `pui`.
 
-Use pueue to create new tasks, and then pui to manage them.
+Use `pueue` to create new tasks, and then `pui` to manage them.
+
+To create a stashed task (ie: one that isn't started):
+
+```bash
+pueue add -s -- 'echo hello world'
+```
 
 To start pui:
 
 ```bash
-./target/release/pui
+pui
 ```
 
 ## Configuration
