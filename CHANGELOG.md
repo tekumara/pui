@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.2](https://github.com/tekumara/pui/compare/v0.1.1...v0.1.2) (2026-08-16)
+
+
+### Builds
+
+* **deps:** bump actions/checkout from 6 to 7 ([#17](https://github.com/tekumara/pui/issues/17)) ([c07fbaf](https://github.com/tekumara/pui/commit/c07fbafec206a9d1e53a09d99d27b492ae30b16a))
+* **deps:** bump actions/create-github-app-token from 2 to 3 ([#10](https://github.com/tekumara/pui/issues/10)) ([77205ee](https://github.com/tekumara/pui/commit/77205ee8f9dd5368fbb55cf1e40aa3713e6f812d))
+* **deps:** bump actions/download-artifact from 7 to 8 ([#7](https://github.com/tekumara/pui/issues/7)) ([332f676](https://github.com/tekumara/pui/commit/332f676e9dafb43685a13560a4d1a75bd130a424))
+* **deps:** bump actions/upload-artifact from 6 to 7 ([#8](https://github.com/tekumara/pui/issues/8)) ([fbeaf95](https://github.com/tekumara/pui/commit/fbeaf957c5e5a12125af3eff75ce85f081e66b15))
+* **deps:** bump dependabot/fetch-metadata from 2 to 3 ([#12](https://github.com/tekumara/pui/issues/12)) ([209b0e9](https://github.com/tekumara/pui/commit/209b0e917099d15e97bccb6c8eba51af25a3439a))
+* **deps:** bump googleapis/release-please-action from 4 to 5 ([#14](https://github.com/tekumara/pui/issues/14)) ([8e7fc16](https://github.com/tekumara/pui/commit/8e7fc16e4ff1d0f02d110d3e635c8b9b719c57ab))
+* **deps:** bump poseidon/wait-for-status-checks from 0.6.0 to 0.7.0 ([#19](https://github.com/tekumara/pui/issues/19)) ([add8bc2](https://github.com/tekumara/pui/commit/add8bc203d7fe3b7c8d149500a00de8110b05ac0))
+* **deps:** bump softprops/action-gh-release from 2 to 3 ([#13](https://github.com/tekumara/pui/issues/13)) ([8e96b59](https://github.com/tekumara/pui/commit/8e96b5960a24072e006950ada53a66dbcf50b6cb))
+* **deps:** bump the all group with 3 updates ([#15](https://github.com/tekumara/pui/issues/15)) ([26847e9](https://github.com/tekumara/pui/commit/26847e92eb9124d3d72ecdc5a3737b11492e057c))
+* **deps:** bump the all group with 3 updates ([#16](https://github.com/tekumara/pui/issues/16)) ([5ba96f7](https://github.com/tekumara/pui/commit/5ba96f7cff8feed03f787bd7695f29d2d44e226f))
+* **deps:** bump the all group with 6 updates ([#18](https://github.com/tekumara/pui/issues/18)) ([ac9df7c](https://github.com/tekumara/pui/commit/ac9df7c760852df789ce6b5c6fad390f323036b4))
+* **deps:** bump the all group with 9 updates ([#20](https://github.com/tekumara/pui/issues/20)) ([b7c345e](https://github.com/tekumara/pui/commit/b7c345e7db2e5a76813f3cfb9260b7683f2044aa))
+
 ## [0.1.1](https://github.com/tekumara/pui/compare/v0.1.0...v0.1.1) (2026-02-17)
 
 
