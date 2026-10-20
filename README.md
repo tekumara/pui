@@ -1,6 +1,8 @@
 # Pui
 
-Pui is a live, interactive terminal dashboard for non-interactive background tasks managed by [Pueue](https://github.com/nukesor/pueue). Pui can manage long-running services. It is also useful for finite-lived processes that you run repeatedly, and for running multiple commands in parallel in the background. Typical examples include builds, tests, scripts, and development servers. Watch tasks run, stream their logs, filter and sort the task list, and run custom commands without leaving your terminal.
+Pui is a live, interactive terminal dashboard for non-interactive background tasks managed by [Pueue](https://github.com/nukesor/pueue). Watch tasks run, stream their logs, filter and sort the task list, and run custom commands without leaving your terminal.
+
+Pui can manage long-running services. It is also useful for finite-lived processes that you run repeatedly, and for running multiple commands in parallel in the background. Typical examples include builds, tests, scripts, and development servers.
 
 ![demo](docs/demo.gif)
 
