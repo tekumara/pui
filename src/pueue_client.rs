@@ -5,10 +5,11 @@ use pueue_lib::network::socket::ConnectionSettings;
 use pueue_lib::secret::read_shared_secret;
 use pueue_lib::settings::Settings;
 use pueue_lib::state::State;
+use std::future::Future;
 
-pub(crate) trait PueueClientOps: Sized {
-    /// Create a new, independent client connection (e.g. for streaming).
-    async fn new(&self) -> Result<Self>;
+pub(crate) trait PueueClientOps: Sized + 'static {
+    /// Create an independent connection without borrowing the state-polling client.
+    fn new(&self) -> impl Future<Output = Result<Self>> + 'static;
     async fn get_state(&mut self) -> Result<State>;
     async fn start_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn restart_tasks(&mut self, tasks: Vec<TaskToRestart>) -> Result<()>;
@@ -16,9 +17,9 @@ pub(crate) trait PueueClientOps: Sized {
     async fn pause_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn kill_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
     async fn remove_tasks(&mut self, ids: Vec<usize>) -> Result<()>;
-    /// Start streaming logs for a task. Returns the initial log content.
-    /// Use `receive_stream_chunk` to get subsequent chunks.
-    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String>;
+    /// Request a log stream without waiting for its first output.
+    /// Read all responses, including the first one, with `receive_stream_chunk`.
+    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<()>;
     /// Receive the next chunk of streamed logs. Returns None if stream closed.
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>>;
     /// Reconnect to the pueue daemon.
@@ -50,8 +51,8 @@ impl PueueClient {
 }
 
 impl PueueClientOps for PueueClient {
-    async fn new(&self) -> Result<Self> {
-        PueueClient::new().await
+    fn new(&self) -> impl Future<Output = Result<Self>> + 'static {
+        PueueClient::new()
     }
 
     async fn get_state(&mut self) -> Result<State> {
@@ -168,32 +169,14 @@ impl PueueClientOps for PueueClient {
         Ok(())
     }
 
-    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<String> {
+    async fn start_log_stream(&mut self, id: usize, lines: Option<usize>) -> Result<()> {
         self.client
             .send_request(Request::Stream(StreamRequest {
                 tasks: TaskSelection::TaskIds(vec![id]),
                 lines,
             }))
             .await
-            .map_err(|e| anyhow!("Failed to send stream request: {:?}", e))?;
-
-        // First response contains the initial log content
-        let response = self
-            .client
-            .receive_response()
-            .await
-            .map_err(|e| anyhow!("Failed to receive stream response: {:?}", e))?;
-
-        match response {
-            Response::Stream(stream_response) => {
-                Ok(stream_response.logs.get(&id).cloned().unwrap_or_default())
-            }
-            Response::Failure(msg) => Err(anyhow!("Stream request failed: {}", msg)),
-            _ => Err(anyhow!(
-                "Unexpected response from pueue daemon: {:?}",
-                response
-            )),
-        }
+            .map_err(|e| anyhow!("Failed to send stream request: {:?}", e))
     }
 
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
