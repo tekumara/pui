@@ -1,5 +1,7 @@
 mod config;
 mod exec;
+#[cfg(test)]
+mod log_stream_tests;
 mod pueue_client;
 #[cfg(test)]
 mod tests;
@@ -9,7 +11,8 @@ use crate::config::{Config, CustomCommand, ParsedKey};
 
 use anyhow::Result;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use futures::stream::StreamExt;
+use futures::TryStreamExt;
+use futures::stream::{self, LocalBoxStream, StreamExt};
 use ratatui::{DefaultTerminal, Frame, layout::Rect, widgets::TableState};
 use std::collections::HashSet;
 use std::time::Duration;
@@ -58,6 +61,14 @@ enum AppMode {
     Help,
 }
 
+struct LogStream(LocalBoxStream<'static, Result<String>>);
+
+impl std::fmt::Debug for LogStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LogStream").finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct App<P: PueueClientOps> {
     /// Is the application running?
@@ -90,8 +101,8 @@ pub(crate) struct App<P: PueueClientOps> {
     pub(crate) config: Config,
     /// Scroll offset for help modal
     help_scroll_offset: u16,
-    /// Streaming client for log mode - separate connection so state polling continues
-    stream_client: Option<P>,
+    /// Owns the independent connection and any in-progress log read.
+    log_stream: Option<LogStream>,
 }
 
 impl<P: PueueClientOps> App<P> {
@@ -116,7 +127,7 @@ impl<P: PueueClientOps> App<P> {
             error_modal: None,
             config,
             help_scroll_offset: 0,
-            stream_client: None,
+            log_stream: None,
         }
     }
 
@@ -146,44 +157,14 @@ impl<P: PueueClientOps> App<P> {
                     }
                 }
 
-                // Stream logs when in Log mode with an active stream
-                // Chunks are produced once every 1000ms by the pueue client
-                chunk_result = async {
-                    if matches!(self.app_mode, AppMode::Log(_))
-                        && let Some(stream_client) = &mut self.stream_client
-                    {
-                        return Some(stream_client.receive_stream_chunk().await);
+                // The stream retains connection/read futures between select! iterations.
+                // Dropping next() on a tick must not cancel a partially read protocol message.
+                chunk = async {
+                    if let Some(log_stream) = &mut self.log_stream {
+                        return log_stream.0.next().await;
                     }
-                    // If not in log mode or no stream, pend forever (let other branches have a turn)
-                    std::future::pending::<Option<Result<Option<String>>>>().await
-                } => {
-                    if let Some(result) = chunk_result
-                        && let AppMode::Log(log_state) = &mut self.app_mode
-                    {
-                        match result {
-                            Ok(Some(chunk)) => {
-                                if !chunk.is_empty() {
-                                    log_state.logs.push_str(&chunk);
-                                    // Update autoscroll if enabled
-                                    if log_state.autoscroll {
-                                        let terminal_size = crossterm::terminal::size()?;
-                                        let page_height = terminal_size.1.saturating_sub(2);
-                                        let page_width = terminal_size.0.saturating_sub(2);
-                                        log_state.update_autoscroll(page_height, page_width);
-                                    }
-                                }
-                            }
-                            Ok(None) => {
-                                // Stream closed (task finished)
-                                self.stream_client = None;
-                            }
-                            Err(_) => {
-                                // Error receiving chunk, close the stream
-                                self.stream_client = None;
-                            }
-                        }
-                    }
-                }
+                    std::future::pending::<Option<Result<String>>>().await
+                } => self.on_log_update(chunk),
 
                 // Tick timeout for state refresh
                 _ = tick_interval.tick() => {
@@ -354,19 +335,17 @@ impl<P: PueueClientOps> App<P> {
                 _ => {}
             },
             AppMode::Log(log_state) => {
-                let terminal_size = crossterm::terminal::size()?;
-                let page_height = terminal_size.1.saturating_sub(2);
-                let page_width = terminal_size.0.saturating_sub(2);
-
                 if key.code == KeyCode::Esc {
-                    // Drop the stream client when exiting log mode
-                    self.stream_client = None;
+                    // Cancel only this viewing connection, including pending setup/reads.
+                    self.log_stream = None;
                     next_mode = Some(AppMode::Normal);
                 } else {
+                    let terminal_size = crossterm::terminal::size()?;
+                    let page_height = terminal_size.1.saturating_sub(2);
+                    let page_width = terminal_size.0.saturating_sub(2);
                     log_state.handle_key(key, page_height, page_width);
+                    log_state.update_autoscroll(page_height, page_width);
                 }
-
-                log_state.update_autoscroll(page_height, page_width);
             }
             AppMode::Help => {
                 let terminal_size = crossterm::terminal::size()?;
@@ -483,18 +462,8 @@ impl<P: PueueClientOps> App<P> {
                                     if is_stashed {
                                         next_mode = Some(AppMode::Log(LogState::new(task_id)));
                                     } else {
-                                        // Create streaming client and start the stream
-                                        match self.start_log_stream(task_id).await {
-                                            Ok(log_state) => {
-                                                next_mode = Some(AppMode::Log(log_state));
-                                            }
-                                            Err(e) => {
-                                                self.error_modal = Some(format!(
-                                                    "Failed to start log stream: {}",
-                                                    e
-                                                ));
-                                            }
-                                        }
+                                        next_mode =
+                                            Some(AppMode::Log(self.start_log_stream(task_id)));
                                     }
                                 }
                             }
@@ -847,31 +816,47 @@ impl<P: PueueClientOps> App<P> {
     /// Set running to false to quit the application.
     fn quit(&mut self) {
         self.running = false;
+        self.log_stream = None;
     }
 
-    /// Create a new streaming client and start the log stream.
-    /// Stores the streaming client in `self.stream_client`.
-    async fn start_log_stream(&mut self, task_id: usize) -> Result<LogState> {
-        let mut stream_client = self.pueue_client.new().await?;
-        let initial_logs = stream_client.start_log_stream(task_id, None).await?;
+    /// Enter log mode immediately; connection setup and output arrive via the event loop.
+    fn start_log_stream(&mut self, task_id: usize) -> LogState {
+        let connection = self.pueue_client.new();
+        self.log_stream = Some(LogStream(
+            stream::once(async move {
+                let mut client = connection.await?;
+                client.start_log_stream(task_id, None).await?;
+                Ok::<_, anyhow::Error>(stream::try_unfold(client, |mut client| async move {
+                    let chunk = client.receive_stream_chunk().await?;
+                    Ok::<_, anyhow::Error>(chunk.map(|chunk| (chunk, client)))
+                }))
+            })
+            .try_flatten()
+            .boxed_local(),
+        ));
+        LogState::new(task_id)
+    }
 
-        self.stream_client = Some(stream_client);
-
-        let mut log_state = LogState {
-            task_id,
-            logs: initial_logs,
-            scroll_offset: 0,
-            autoscroll: true,
-        };
-
-        // Scroll to end of initial logs
-        if let Ok(terminal_size) = crossterm::terminal::size() {
-            let page_height = terminal_size.1.saturating_sub(2);
-            let page_width = terminal_size.0.saturating_sub(2);
-            log_state.update_autoscroll(page_height, page_width);
+    fn on_log_update(&mut self, update: Option<Result<String>>) {
+        match update {
+            Some(Ok(chunk)) => {
+                if let AppMode::Log(log_state) = &mut self.app_mode {
+                    log_state.logs.push_str(&chunk);
+                    if log_state.autoscroll
+                        && let Ok(size) = crossterm::terminal::size()
+                    {
+                        log_state
+                            .update_autoscroll(size.1.saturating_sub(2), size.0.saturating_sub(2));
+                    }
+                }
+            }
+            Some(Err(error)) => {
+                self.log_stream = None;
+                self.app_mode = AppMode::Normal;
+                self.error_modal = Some(format!("Failed to stream logs: {error}"));
+            }
+            None => self.log_stream = None,
         }
-
-        Ok(log_state)
     }
 
     /// Get the path of the currently selected task

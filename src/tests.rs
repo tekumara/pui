@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{Local, TimeZone};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use futures::StreamExt;
 use pueue_lib::state::State;
 use pueue_lib::task::{Task, TaskResult, TaskStatus};
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Rect, widgets::TableState};
@@ -89,15 +90,10 @@ impl MockPueueClient {
 }
 
 impl PueueClientOps for MockPueueClient {
-    async fn new(&self) -> Result<Self> {
-        // We copy state so the streaming client sees the same tasks (e.g. stashed)
-        // as the original client. This perverts the interface — ideally `new` wouldn't
-        // take `&self`, but without a mock pueue server the streaming client has no
-        // other way to know about the current task state. If we mock the server in
-        // the future we could remove the `&self` parameter from the trait.
-        Ok(Self {
-            state: self.state.clone(),
-        })
+    fn new(&self) -> impl std::future::Future<Output = Result<Self>> + 'static {
+        // Give the viewing connection its own state, without borrowing the polling client.
+        let state = self.state.clone();
+        async move { Ok(Self { state }) }
     }
 
     async fn get_state(&mut self) -> Result<State> {
@@ -128,19 +124,22 @@ impl PueueClientOps for MockPueueClient {
         Ok(())
     }
 
-    async fn start_log_stream(&mut self, id: usize, _lines: Option<usize>) -> Result<String> {
-        // Simulate real pueue daemon: hangs forever for stashed tasks (no log file exists)
-        if let Some(task) = self.state.tasks.get(&id) {
-            if matches!(task.status, TaskStatus::Stashed { .. }) {
-                std::future::pending::<()>().await;
-                unreachable!();
-            }
-        }
-        Ok("Log line 1\nLog line 2\nLog line 3".to_string())
+    async fn start_log_stream(&mut self, id: usize, _lines: Option<usize>) -> Result<()> {
+        // Only this independent mock connection is subscribed to the selected task.
+        self.state.tasks.retain(|task_id, _| *task_id == id);
+        Ok(())
     }
 
     async fn receive_stream_chunk(&mut self) -> Result<Option<String>> {
-        Ok(None) // Immediately close the stream for tests
+        // No first response for queued/quiet running tasks, just like Pueue.
+        if self.state.tasks.values().any(|task| !task.is_done()) {
+            std::future::pending::<()>().await;
+        }
+        if self.state.tasks.is_empty() {
+            return Ok(None);
+        }
+        self.state.tasks.clear();
+        Ok(Some("Log line 1\nLog line 2\nLog line 3".to_string()))
     }
 
     async fn reconnect(&mut self) -> Result<()> {
@@ -653,8 +652,7 @@ async fn test_log_view_stashed_task_shows_empty() -> Result<()> {
     assert_eq!(app.current_task_id, Some(0));
 
     // Send Enter key through the real on_key_event handler.
-    // The mock's start_log_stream hangs for stashed tasks (like the real daemon),
-    // so this must complete without hanging — the app should skip the stream.
+    // Stashed tasks have no log stream; opening the empty view must not wait.
     let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
     tokio::time::timeout(
         Duration::from_secs(1),
@@ -682,6 +680,64 @@ async fn test_log_view_stashed_task_shows_empty() -> Result<()> {
 
     insta::assert_snapshot!(ui);
 
+    Ok(())
+}
+
+/// Quiet running tasks and tasks waiting to start must not block the key handler.
+#[tokio::test]
+async fn test_log_view_without_output_remains_responsive() -> Result<()> {
+    use crate::{App, AppMode};
+    use std::time::Duration;
+
+    let now = Local.timestamp_opt(1767225600, 0).unwrap();
+    for status in [
+        TaskStatus::Running {
+            enqueued_at: now,
+            start: now,
+        },
+        TaskStatus::Queued { enqueued_at: now },
+    ] {
+        let mut client = MockPueueClient::new();
+        client.state.tasks.get_mut(&0).unwrap().status = status;
+        let mut app = App::new(client, Config::default());
+        app.refresh_state().await?;
+        let mut terminal = Terminal::new(TestBackend::new(80, 24))?;
+        terminal.draw(|f| app.draw(f))?;
+
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            app.on_key_event(
+                KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+                &mut terminal,
+            ),
+        )
+        .await
+        .expect("opening a quiet task must not block input")?;
+        assert!(matches!(app.app_mode, AppMode::Log(_)));
+        // Actually poll through connection/request setup to the pending log read.
+        assert!(futures::poll!(app.log_stream.as_mut().unwrap().0.next()).is_pending());
+        tokio::time::timeout(Duration::from_secs(1), app.refresh_state())
+            .await
+            .expect("state polling must continue while output is silent")?;
+        terminal.draw(|f| app.draw(f))?;
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            app.on_key_event(
+                KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE),
+                &mut terminal,
+            ),
+        )
+        .await
+        .expect("Esc must remain responsive")?;
+        assert!(matches!(app.app_mode, AppMode::Normal));
+        assert!(app.log_stream.is_none());
+        app.on_key_event(
+            KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE),
+            &mut terminal,
+        )
+        .await?;
+        assert!(!app.running);
+    }
     Ok(())
 }
 
