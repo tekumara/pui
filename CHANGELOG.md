@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3](https://github.com/tekumara/pui/compare/v0.1.2...v0.1.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* keep log viewer responsive for tasks without output ([#24](https://github.com/tekumara/pui/issues/24)) ([2e9d4e2](https://github.com/tekumara/pui/commit/2e9d4e2a2af73005fe83be7f71b15bb26074778c))
+
+
+### Builds
+
+* **deps:** bump the all group with 6 updates ([#25](https://github.com/tekumara/pui/issues/25)) ([dc394ad](https://github.com/tekumara/pui/commit/dc394ade19eb2e70e574c96b581e5f9b1521b8d8))
+
 ## [0.1.2](https://github.com/tekumara/pui/compare/v0.1.1...v0.1.2) (2026-10-20)
 
 
